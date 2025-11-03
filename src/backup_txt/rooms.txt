@@ -1,0 +1,47 @@
+const express = require("express");
+const router = express.Router();
+const pool = require("../db");
+
+// ✅ Get Rooms by Building & Floor
+router.get("/", async (req, res) => {
+  let { building, floor } = req.query;
+  floor = Number(floor); // ensure integer for query
+
+  try {
+    const result = await pool.query(`
+      SELECT r.room_id, r.room_number, r.capacity, r.current_occupancy
+      FROM rooms r
+      JOIN floors f ON r.floor_id = f.floor_id
+      JOIN buildings b ON f.building_id = b.building_id
+      WHERE b.building_name = $1 AND f.floor_number = $2
+      ORDER BY r.room_number ASC
+    `, [building, floor]);
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Error fetching rooms:", err);
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+// ✅ Get Students in a Room
+router.get("/:roomId/students", async (req, res) => {
+  const { roomId } = req.params;
+
+  try {
+    const result = await pool.query(`
+      SELECT s.student_id, s.name, s.roll_no, s.cgpa, s.year, a.expiry_date
+      FROM allocations a
+      JOIN students s ON a.student_id = s.student_id
+      WHERE a.room_id = $1 AND a.active = TRUE
+      ORDER BY s.year ASC, s.cgpa DESC
+    `, [roomId]);
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Error fetching students in room:", err);
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+module.exports = router;

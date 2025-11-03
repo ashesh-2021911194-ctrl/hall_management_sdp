@@ -1,0 +1,456 @@
+//import React, { useState } from 'react';
+import React, { useState, useEffect } from "react";
+
+import { Link } from 'react-router-dom';
+import {
+  AppBar,
+  Box,
+  Container,
+  Grid,
+  Card,
+  CardContent,
+  Typography,
+  IconButton,
+  Button,
+  Toolbar,
+  Chip,
+  Avatar,
+  useTheme,
+  alpha,
+  TextField,
+  InputAdornment,
+  Select,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Paper,
+  Badge,
+  Menu,
+  ToggleButton,
+  ToggleButtonGroup,
+} from '@mui/material';
+import {
+  Menu as MenuIcon,
+  Search as SearchIcon,
+  Notifications as NotificationsIcon,
+  AccountCircle as AccountCircleIcon,
+  Logout as LogoutIcon,
+} from '@mui/icons-material';
+import { FaFileUpload, FaClipboardList, FaUtensils, FaUserTie, FaExclamationCircle, FaHotel } from 'react-icons/fa';
+import SeatAllocationSection from './SeatAllocationSection';
+import { useNavigate } from "react-router-dom";
+
+
+const navLinks = [
+  { label: 'Home', to: '/home', style: { color: 'white' } },
+  { label: 'Search', to: '/search', style: { color: 'white' } },
+  { label: 'Notifications', to: '/notifications', style: { color: 'white' } },
+];
+
+const HomePage = ({ user }) => {
+  const theme = useTheme();
+  //const theme = useTheme();
+  const navigate = useNavigate();
+  const [userRole, setUserRole] = useState(user?.role || 'student');
+
+  // Notification state
+  const [notifications, setNotifications] = useState([]);
+
+  useEffect(() => {
+  if (userRole === "student" && user?.allStudentId) {
+    fetch(`/students/${user.allStudentId}/notifications`)
+      .then(res => res.json())
+      .then(data => {
+        // Map backend data to frontend format
+        setNotifications(
+          data.map(n => ({
+            id: n.notification_id,
+            type: n.type,
+            message: n.message,
+            date: new Date(n.created_at).toLocaleDateString(),
+            read: n.read,
+            link: n.link
+          }))
+        );
+      })
+      .catch(err => console.error("Failed to fetch notifications", err));
+  }
+}, [userRole, user?.allStudentId]);
+
+  const [anchorEl, setAnchorEl] = useState(null);
+  
+
+  // Features (same as before, but you can update stats/links as needed)
+  const studentFeatures = [
+    {
+      id: 1,
+      title: 'Seat Allocation',
+      description: 'View your room allocation and details.',
+      icon: <FaHotel size={28} />,
+      link: '/seat-allocation',
+      color: '#3B82F6',
+    },
+    {
+      id: 2,
+      title: 'Notice Board',
+      description: 'Stay updated with the latest hall notices.',
+      icon: <FaClipboardList size={28} />,
+      link: '/notices',
+      color: '#6366F1',
+    },
+    {
+      id: 3,
+      title: 'Canteen Menu',
+      description: "Check today's canteen menu and reviews.",
+      icon: <FaUtensils size={28} />,
+      link: '/canteen',
+      color: '#06B6D4',
+    },
+    {
+      id: 4,
+      title: 'Document Upload',
+      description: 'Upload and manage your documents.',
+      icon: <FaFileUpload size={28} />,
+      link: '/documents',
+      color: '#A21CAF',
+    },
+    {
+      id: 5,
+      title: 'Complaints',
+      description: 'Submit and track your complaints.',
+      icon: <FaExclamationCircle size={28} />,
+      link: '/complaints',
+      color: '#F59E42',
+    },
+    {
+      id: 6,
+      title: 'Staff Info',
+      description: 'View hall staff and authority details.',
+      icon: <FaUserTie size={28} />,
+      link: '/staff',
+      color: '#2563EB',
+    },
+  ];
+
+  const authorityFeatures = [
+    {
+      id: 1,
+      title: 'Smart Seat Allocation',
+      description: 'Allocate and manage student rooms.',
+      icon: <FaHotel size={28} />,
+      link: '/seat-allocation',
+      color: '#3B82F6',
+    },
+    {
+      id: 2,
+      title: 'Notice Management',
+      description: 'Create and manage hall notices.',
+      icon: <FaClipboardList size={28} />,
+      link: '/notices',
+      color: '#6366F1',
+    },
+    {
+      id: 3,
+      title: 'Live Canteen Menu',
+      description: 'Update and review canteen menu.',
+      icon: <FaUtensils size={28} />,
+      link: '/canteen',
+      color: '#06B6D4',
+    },
+    {
+      id: 4,
+      title: 'Document Management',
+      description: 'Review and manage student documents.',
+      icon: <FaFileUpload size={28} />,
+      link: '/documents',
+      color: '#A21CAF',
+    },
+    {
+      id: 5,
+      title: 'Complaints Management',
+      description: 'Handle and resolve student complaints.',
+      icon: <FaExclamationCircle size={28} />,
+      link: '/complaints',
+      color: '#F59E42',
+    },
+    {
+      id: 6,
+      title: 'Verified Hall Staff',
+      description: 'Manage and verify hall staff.',
+      icon: <FaUserTie size={28} />,
+      link: '/staff',
+      color: '#2563EB',
+    },
+  ];
+
+  const features = userRole === 'student' ? studentFeatures : authorityFeatures;
+
+  // Helper to split features into rows of 3
+  const featureRows = [];
+  for (let i = 0; i < features.length; i += 3) {
+    featureRows.push(features.slice(i, i + 3));
+  }
+
+  const handleNotificationClick = (event) => {
+    setAnchorEl(event.currentTarget);
+  };
+  const handleNotificationClose = () => {
+    setAnchorEl(null);
+  };
+  const handleNotificationItemClick = async (notification) => {
+  try {
+    // Mark as read in backend
+    await fetch(`/students/${user.allStudentId}/notifications/${notification.id}/read`, {
+      method: 'POST'
+    });
+
+    // Update state locally
+    setNotifications(notifications.map(n =>
+      n.id === notification.id ? { ...n, read: true } : n
+    ));
+
+    // Close dropdown
+    setAnchorEl(null);
+
+    // Navigate if link exists
+    if (notification.link) {
+      window.location.href = notification.link;
+    }
+  } catch (err) {
+    console.error("Error marking notification as read:", err);
+  }
+};
+
+
+  return (
+    <Box sx={{ bgcolor: theme.palette.background.default, minHeight: '100vh' }}>
+
+      {/* Top Navigation Bar */}
+      <AppBar
+  position="static"
+  elevation={0}
+  sx={{
+    background: theme.palette.primary.main,
+    backgroundImage: 'linear-gradient(90deg, #1e40af 0%, #1e3a8a 100%)',
+    color: theme.palette.primary.contrastText,
+    py: 1.2,
+  }}
+>
+
+        <Toolbar sx={{ justifyContent: 'space-between' }}>
+          <Typography variant="h5" sx={{ fontWeight: 700, color: '#2563EB', letterSpacing: 1 }}>
+            DU HallHub
+          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            {/* Role Switcher */}
+            <ToggleButtonGroup
+              value={userRole}
+              exclusive
+              onChange={(e, value) => { if (value) setUserRole(value); }}
+              size="small"
+              sx={{
+  mr: 2,
+  bgcolor: alpha(theme.palette.primary.light, 0.1),
+  borderRadius: 2,
+  '& .Mui-selected': {
+    bgcolor: theme.palette.primary.main,
+    color: '#fff !important',
+  },
+}}
+
+            >
+              <ToggleButton value="student" sx={{ fontWeight: 600, px: 2 }}>
+                Student
+              </ToggleButton>
+              <ToggleButton value="authority" sx={{ fontWeight: 600, px: 2 }}>
+                Authority
+              </ToggleButton>
+            </ToggleButtonGroup>
+            {navLinks.map((nav) => (
+              nav.label !== 'Notifications' ? (
+                <Button key={nav.label} component={Link} to={nav.to} sx={{ color: '#f0f0f1ff', fontWeight: 500, fontSize: '1rem', borderRadius: 8, px: 2 }}>
+                  {nav.label}
+                </Button>
+              ) : null
+            ))}
+            {/* Notifications Bell */}
+            <IconButton color="primary" onClick={handleNotificationClick} sx={{ ml: 1 }}>
+  <Badge badgeContent={notifications.filter(n => !n.read).length} color="error">
+    <NotificationsIcon />
+  </Badge>
+</IconButton>
+
+            <Menu
+              anchorEl={anchorEl}
+              open={Boolean(anchorEl)}
+              onClose={handleNotificationClose}
+              PaperProps={{ sx: { width: 320, maxHeight: 400 } }}
+            >
+              {notifications.length === 0 ? (
+                <MenuItem disabled>No notifications</MenuItem>
+              ) : (
+                notifications.map((notification) => (
+                  <MenuItem
+                    key={notification.id}
+                    onClick={() => handleNotificationItemClick(notification)}
+                    sx={{
+                      bgcolor: notification.read ? 'inherit' : alpha(theme.palette.primary.main, 0.05),
+                      '&:hover': {
+                        bgcolor: alpha(theme.palette.primary.main, 0.1),
+                      }
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                      <Typography variant="body2">{notification.message}</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {notification.date}
+                      </Typography>
+                    </Box>
+                  </MenuItem>
+                ))
+              )}
+            </Menu>
+            {userRole === "student" && (
+  <IconButton
+    onClick={() => navigate("/profile", { state: { user } })}
+    color="primary"
+    sx={{ ml: 1 }}
+  >
+    <Avatar sx={{ bgcolor: theme.palette.secondary.main }}>
+      <AccountCircleIcon />
+    </Avatar>
+  </IconButton>
+)}
+
+            <IconButton sx={{ ml: 1 }} color="primary">
+              <LogoutIcon />
+            </IconButton>
+          </Box>
+        </Toolbar>
+      </AppBar>
+
+      {/* Hero Section */}
+      <Box sx={{
+        width: '100%',
+        minHeight: 320,
+        background: 'linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%)',
+color: theme.palette.primary.contrastText,
+
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexDirection: 'column',
+        position: 'relative',
+        px: 2,
+        pb: 4,
+      }}>
+        <Box sx={{ maxWidth: 600, textAlign: 'center', zIndex: 2 }}>
+          <Typography variant="h3" sx={{ fontWeight: 700, mb: 2, letterSpacing: 1 }}>
+            Welcome to DU HallHub
+          </Typography>
+          <Typography variant="h6" sx={{ mb: 3, opacity: 0.95 }}>
+            Your centralized system for hall management, canteen updates, notices & more.
+          </Typography>
+          <Button
+  variant="contained"
+  color="secondary"
+  sx={{
+    borderRadius: 2,
+    fontWeight: 600,
+    px: 4,
+    py: 1.5,
+  }}
+>
+  Read More
+</Button>
+
+        </Box>
+        {/* Decorative Circles */}
+        <Box sx={{ position: 'absolute', right: 0, top: 0, width: 320, height: 320, zIndex: 1, opacity: 0.18 }}>
+          <svg width="100%" height="100%" viewBox="0 0 320 320">
+            <circle cx="160" cy="160" r="120" fill="#fff" />
+            <circle cx="220" cy="100" r="80" fill="#fff" />
+            <circle cx="260" cy="200" r="60" fill="#fff" />
+          </svg>
+        </Box>
+      </Box>
+
+      {/* Main Content */}
+<Container maxWidth="xl" sx={{ mt: -10, zIndex: 3, position: 'relative' }}>
+  <Grid container spacing={4} justifyContent="center">
+  {/* Features Section */}
+  <Grid item xs={12} md={8}>
+    <Paper elevation={3} sx={{ p: 4, borderRadius: 4, bgcolor: '#F1F5F9' }}>
+      <Typography
+        variant="h5"
+        sx={{ fontWeight: 600, mb: 3, color: '#1E293B', textAlign: 'center' }}
+      >
+        Features
+      </Typography>
+
+      <Grid container spacing={4} justifyContent="center">
+        {features.map((feature) => (
+          <Grid item key={feature.id} xs={12} sm={6} md={4} lg={3}>
+            <Card
+              sx={{
+                p: 3,
+                textAlign: 'center',
+                transition: 'transform 0.3s ease, box-shadow 0.3s ease',
+                borderRadius: 3,
+                boxShadow: 2,
+                '&:hover': {
+                  transform: 'translateY(-6px)',
+                  boxShadow: 6,
+                },
+              }}
+            >
+              <Box
+                sx={{
+                  width: 64,
+                  height: 64,
+                  mx: 'auto',
+                  mb: 2,
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  bgcolor: alpha(feature.color, 0.1),
+                  color: feature.color,
+                  fontSize: 32,
+                }}
+              >
+                {feature.icon}
+              </Box>
+
+              <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
+                {feature.title}
+              </Typography>
+
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                {feature.description}
+              </Typography>
+
+              <Button
+                component={Link}
+                to={feature.link}
+                variant="contained"
+                size="small"
+                sx={{ mt: 1 }}
+              >
+                Open
+              </Button>
+            </Card>
+          </Grid>
+        ))}
+      </Grid>
+    </Paper>
+  </Grid>
+</Grid>
+
+</Container>
+
+    </Box>
+  );
+};
+
+export default HomePage; 

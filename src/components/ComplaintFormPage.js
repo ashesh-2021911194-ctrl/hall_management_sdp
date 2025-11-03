@@ -1,0 +1,623 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  Box,
+  Container,
+  Typography,
+  Card,
+  CardContent,
+  Grid,
+  TextField,
+  Button,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Chip,
+  IconButton,
+  InputBase,
+  Paper,
+  CircularProgress,
+  Alert,
+  useTheme,
+  alpha,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Fab
+} from '@mui/material';
+import {
+  Search as SearchIcon,
+  Add as AddIcon,
+  CheckCircle as CheckCircleIcon,
+  Cancel as CancelIcon,
+  Pending as PendingIcon,
+} from '@mui/icons-material';
+import axios from "axios";
+
+const ComplaintFormPage = ({ user }) => {
+  const theme = useTheme();
+  const [complaints, setComplaints] = useState([]);
+  const [loading, setLoading] = useState(user?.role === "authority");
+  const [error, setError] = useState(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const userRole = user?.role || "student";
+  const [viewDialog, setViewDialog] = useState(false);
+  const [viewComplaint, setViewComplaint] = useState(null);
+
+  const API_BASE =
+    user?.role === "authority"
+      ? "http://localhost:5000/api/authority/complaints"
+      : "http://localhost:5000/api/admin/students/complaints";
+
+  const [openDialog, setOpenDialog] = useState(false);
+  const [selectedComplaint, setSelectedComplaint] = useState(null);
+  const [newComplaint, setNewComplaint] = useState({
+    title: "",
+    description: "",
+    category: "",
+    priority: "medium",
+    status: "pending",
+  });
+  const [replyDialog, setReplyDialog] = useState(false);
+  const [reply, setReply] = useState("");
+
+
+  // ✅ Use same student resolver as seat allocation
+  const resolveStudentObj = (u) => {
+    if (!u) return null;
+    let cur = u;
+    for (let i = 0; i < 4; i++) {
+      if (!cur) return null;
+      if (cur.allStudentId || cur.all_student_id) return cur;
+      if (cur.user && typeof cur.user === "object") {
+        cur = cur.user;
+        continue;
+      }
+      return null;
+    }
+    return null;
+  };
+
+  const studentObj = resolveStudentObj(user);
+  const studentId = studentObj?.allStudentId || studentObj?.all_student_id;
+
+  const fetchComplaints = useCallback(async () => {
+  setLoading(true);
+  setError(null);
+
+  try {
+    let url;
+    if (userRole === "student") {
+      if (!studentId) throw new Error("Student ID not loaded yet");
+      url = `${API_BASE}/${studentId}`;
+    } else if (userRole === "authority") {
+      url = `${API_BASE}`; // fetch all complaints
+    }
+
+    console.log("Fetching complaints from:", url);
+    const res = await axios.get(url);
+
+    const mappedData = (res.data || []).map((c) => ({
+      id: c.complaint_id,
+      title: c.title,
+      description: c.description,
+      status: c.status,
+      date: new Date(c.created_at).toLocaleDateString(),
+      reply: c.response,
+      studentName: c.student_name,
+    }));
+
+    setComplaints(mappedData);
+  } catch (err) {
+    console.error("Error fetching complaints:", err);
+    setError("Failed to fetch complaints");
+  } finally {
+    setLoading(false);
+  }
+}, [API_BASE, userRole, studentId]);
+
+
+  useEffect(() => {
+  if ((userRole === "student" && studentId) || userRole === "authority") {
+    fetchComplaints();
+  }
+}, [fetchComplaints, userRole, studentId]);
+
+
+  // ✅ Submit complaint
+  // ✅ Submit complaint
+  const handleAddComplaint = async () => {
+    if (!studentId) {
+      setError("Cannot submit complaint: Student ID not loaded yet.");
+      return;
+    }
+    if (!newComplaint.title || !newComplaint.description) {
+      alert("Please fill in all fields");
+      return;
+    }
+
+    try {
+      const res = await axios.post(API_BASE, {
+        allStudentId: studentId,
+        title: newComplaint.title,
+        description: newComplaint.description,
+      });
+
+      alert("Complaint submitted successfully!");
+      setOpenDialog(false);
+      setNewComplaint({ title: "", description: "" });
+      fetchComplaints();
+    } catch (err) {
+      console.error("Error submitting complaint:", err);
+      setError("Failed to submit complaint");
+    }
+  };
+
+  // ✅ Update status (authority)
+  const handleStatusChange = async (complaintId, newStatus) => {
+    try {
+      await axios.put(
+        `http://localhost:5000/api/authority/complaints/${complaintId}/status`,
+        { status: newStatus }
+      );
+      fetchComplaints();
+    } catch (err) {
+      console.error("Error updating status:", err);
+      setError("Failed to update complaint status");
+    }
+  };
+
+  // ✅ Reply (authority)
+  const handleReply = (complaintId) => {
+    const complaint = complaints.find((c) => c.id === complaintId);
+    setSelectedComplaint(complaint);
+    setReply(complaint.reply || "");
+    setReplyDialog(true);
+  };
+
+  const handleSubmitReply = async () => {
+    if (!reply.trim()) return;
+
+    try {
+      await axios.put(
+        `http://localhost:5000/api/authority/complaints/${selectedComplaint.id}/respond`,
+        { response: reply, status: "Resolved" }
+      );
+      setReplyDialog(false);
+      fetchComplaints();
+    } catch (err) {
+      console.error("Error submitting reply:", err);
+      setError("Failed to send response");
+    }
+  };
+
+  const handleCloseDialog = () => {
+    setOpenDialog(false);
+    setSelectedComplaint(null);
+    setNewComplaint({
+      title: "",
+      description: "",
+      category: "",
+      priority: "medium",
+      status: "pending",
+    });
+  };
+  const getStatusColor = (status) => {
+    switch (status) {
+      case "resolved":
+        return "success";
+      case "in-progress":
+        return "warning";
+      case "rejected":
+        return "error";
+      default:
+        return "default";
+    }
+  };
+
+  const getStatusIcon = (status) => {
+    switch (status) {
+      case "resolved":
+        return <CheckCircleIcon />;
+      case "in-progress":
+        return <PendingIcon />;
+      case "rejected":
+        return <CancelIcon />;
+      default:
+        return <PendingIcon />;
+    }
+  };
+
+  const getPriorityColor = (priority) => {
+    switch (priority) {
+      case "high":
+        return "error";
+      case "medium":
+        return "warning";
+      case "low":
+        return "info";
+      default:
+        return "default";
+    }
+  };
+
+  const filteredComplaints = complaints.filter(
+    (complaint) =>
+      complaint.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      complaint.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      complaint.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (complaint.studentName &&
+        complaint.studentName.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
+
+  if (loading) {
+    return (
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          minHeight: "100vh",
+        }}
+      >
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Container maxWidth="lg" sx={{ py: 4 }}>
+        <Alert severity="error">{error}</Alert>
+      </Container>
+    );
+  }
+
+  return (
+  <Box
+    sx={{
+      minHeight: '100vh',
+      position: 'relative',
+      bgcolor: 'transparent', // remove solid color
+      background: 'linear-gradient(to bottom, #0B3D91 50%, #ffffff 50%)',
+      overflow: 'hidden',
+      py: 6,
+    }}
+  >
+    {/* Background Circles */}
+    <Box
+      sx={{
+        position: 'absolute',
+        width: 200,
+        height: 200,
+        bgcolor: 'rgba(255,255,255,0.05)',
+        borderRadius: '50%',
+        top: '10%',
+        left: '5%',
+        filter: 'blur(40px)',
+      }}
+    />
+    <Box
+      sx={{
+        position: 'absolute',
+        width: 300,
+        height: 300,
+        bgcolor: 'rgba(255,255,255,0.04)',
+        borderRadius: '50%',
+        bottom: '15%',
+        right: '10%',
+        filter: 'blur(60px)',
+      }}
+    />
+
+    <Container maxWidth="lg" sx={{ position: 'relative', zIndex: 2 }}>
+      {/* Header */}
+      <Box
+        sx={{
+          bgcolor: 'white',
+          color: '#0B3D91',
+          p: 4,
+          borderRadius: 3,
+          mb: 4,
+          position: 'relative',
+        }}
+      >
+        <Typography variant="h4" fontWeight="bold" gutterBottom sx={{ color: '#0B3D91' }}>
+          Complaints
+        </Typography>
+        <Typography variant="body1" sx={{ color: '#0B3D91', opacity: 0.95 }}>
+          {userRole === 'student'
+            ? 'Submit and track your complaints'
+            : 'Manage and respond to student complaints'}
+        </Typography>
+
+        {userRole === 'student' && (
+          <Fab
+            color="secondary"
+            aria-label="add"
+            onClick={() => setOpenDialog(true)}
+            sx={{
+              position: 'absolute',
+              right: 24,
+              bottom: -24,
+            }}
+          >
+            <AddIcon />
+          </Fab>
+        )}
+      </Box>
+
+      {/* Search Bar */}
+      <Paper
+        sx={{
+          p: '2px 4px',
+          display: 'flex',
+          alignItems: 'center',
+          mb: 4,
+          bgcolor: 'white',
+          borderRadius: 2,
+        }}
+      >
+        <IconButton sx={{ p: '10px', color: '#0B3D91' }} aria-label="search">
+          <SearchIcon />
+        </IconButton>
+        <InputBase
+          sx={{ ml: 1, flex: 1, color: '#0B3D91' }}
+          placeholder="Search complaints..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+      </Paper>
+
+      {/* Complaints Grid */}
+      {filteredComplaints.length === 0 ? (
+        <Alert severity="info" sx={{ mb: 4, borderRadius: 2 }}>
+          No complaints yet. Click the + button above to submit one.
+        </Alert>
+      ) : (
+        <Grid container spacing={3}>
+          {filteredComplaints.map((complaint) => (
+            <Grid item xs={12} sm={6} md={4} key={complaint.id}>
+              <Card
+  sx={{
+    height: 300,
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'space-between',
+    bgcolor: 'white', // ✅ Changed from rgba(255,255,255,0.08)
+    color: '#0B3D91',
+    borderRadius: 3,
+    p: 2,
+    transition: 'transform 0.3s ease, box-shadow 0.3s ease',
+    '&:hover': {
+      transform: 'translateY(-6px)',
+      boxShadow: '0 8px 25px rgba(0,0,0,0.12)',
+    },
+  }}
+>
+
+                <CardContent sx={{ flexGrow: 1 }}>
+                  <Typography variant="h6" gutterBottom noWrap sx={{ color: '#0B3D91' }}>
+                    {complaint.title}
+                  </Typography>
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      color: '#0B3D91',
+                      mb: 2,
+                      overflow: 'hidden',
+                      display: '-webkit-box',
+                      WebkitLineClamp: 3,
+                      WebkitBoxOrient: 'vertical',
+                    }}
+                  >
+                    {complaint.description}
+                  </Typography>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                    <Chip
+                      label={complaint.category}
+                      size="small"
+                      sx={{ bgcolor: 'rgba(255,255,255,0.15)', color: '#0B3D91' }}
+                    />
+                    <Chip
+                      label={complaint.priority}
+                      size="small"
+                      sx={{ bgcolor: 'rgba(255,255,255,0.15)', color: '#0B3D91' }}
+                    />
+                    <Chip
+                      icon={getStatusIcon(complaint.status)}
+                      label={complaint.status}
+                      size="small"
+                      sx={{ bgcolor: 'rgba(255,255,255,0.15)', color: '#0B3D91' }}
+                    />
+                  </Box>
+                </CardContent>
+
+                <Box
+                  sx={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    px: 2,
+                    pb: 1,
+                  }}
+                >
+                  <Typography variant="caption" sx={{ color: '#0B3D91' }}>
+                    {complaint.studentName} — {complaint.date}
+                  </Typography>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={() => {
+                      setViewComplaint(complaint);
+                      setViewDialog(true);
+                    }}
+                    sx={{
+                      borderColor: '#0B3D91',
+                      color: '#0B3D91',
+                      textTransform: 'none',
+                      '&:hover': {
+                        borderColor: '#0B3D91',
+                        bgcolor: 'rgba(11,61,145,0.06)',
+                      },
+                    }}
+                  >
+                    View Details
+                  </Button>
+                </Box>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
+      )}
+
+      {/* Complaint Details Dialog */}
+      <Dialog
+        open={viewDialog}
+        onClose={() => setViewDialog(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Complaint Details</DialogTitle>
+        <DialogContent>
+          {viewComplaint && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
+              <Typography variant="h6" sx={{ color: '#0B3D91' }}>{viewComplaint.title}</Typography>
+              <Typography variant="body2" sx={{ color: '#0B3D91' }}>{viewComplaint.description}</Typography>
+              <Typography variant="subtitle2" sx={{ color: '#0B3D91' }}>
+                Submitted by: {viewComplaint.studentName} on {viewComplaint.date}
+              </Typography>
+              <Typography sx={{ color: '#0B3D91' }}>Status: {viewComplaint.status}</Typography>
+              {viewComplaint.reply && (
+                <Box
+                  sx={{
+                    bgcolor: alpha(theme.palette.primary.main, 0.03),
+                    p: 2,
+                    borderRadius: 1,
+                  }}
+                >
+                  <Typography variant="subtitle2" sx={{ color: '#0B3D91' }}>
+                    Authority's Response:
+                  </Typography>
+                  <Typography sx={{ color: '#0B3D91' }}>{viewComplaint.reply}</Typography>
+                </Box>
+              )}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setViewDialog(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Add/Edit Complaint Dialog */}
+      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          {selectedComplaint ? 'Edit Complaint' : 'Submit New Complaint'}
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
+            <TextField
+              label="Title"
+              fullWidth
+              value={newComplaint.title}
+              onChange={(e) =>
+                setNewComplaint({ ...newComplaint, title: e.target.value })
+              }
+            />
+            <TextField
+              label="Description"
+              fullWidth
+              multiline
+              rows={4}
+              value={newComplaint.description}
+              onChange={(e) =>
+                setNewComplaint({ ...newComplaint, description: e.target.value })
+              }
+            />
+            <FormControl fullWidth>
+              <InputLabel>Category</InputLabel>
+              <Select
+                value={newComplaint.category}
+                label="Category"
+                onChange={(e) =>
+                  setNewComplaint({ ...newComplaint, category: e.target.value })
+                }
+              >
+                <MenuItem value="Maintenance">Maintenance</MenuItem>
+                <MenuItem value="Discipline">Discipline</MenuItem>
+                <MenuItem value="Facilities">Facilities</MenuItem>
+                <MenuItem value="Other">Other</MenuItem>
+              </Select>
+            </FormControl>
+            <FormControl fullWidth>
+              <InputLabel>Priority</InputLabel>
+              <Select
+                value={newComplaint.priority}
+                label="Priority"
+                onChange={(e) =>
+                  setNewComplaint({ ...newComplaint, priority: e.target.value })
+                }
+              >
+                <MenuItem value="high">High</MenuItem>
+                <MenuItem value="medium">Medium</MenuItem>
+                <MenuItem value="low">Low</MenuItem>
+              </Select>
+            </FormControl>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseDialog}>Cancel</Button>
+          <Button
+            onClick={handleAddComplaint}
+            variant="contained"
+            disabled={
+              !newComplaint.title ||
+              !newComplaint.description ||
+              !newComplaint.category
+            }
+          >
+            {selectedComplaint ? 'Save Changes' : 'Submit Complaint'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Reply Dialog */}
+      <Dialog
+        open={replyDialog}
+        onClose={() => setReplyDialog(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Reply to Complaint</DialogTitle>
+        <DialogContent>
+          <Box sx={{ pt: 2 }}>
+            <TextField
+              label="Your Response"
+              fullWidth
+              multiline
+              rows={4}
+              value={reply}
+              onChange={(e) => setReply(e.target.value)}
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setReplyDialog(false)}>Cancel</Button>
+          <Button
+            onClick={handleSubmitReply}
+            variant="contained"
+            disabled={!reply.trim()}
+          >
+            Submit Response
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Container>
+  </Box>
+);
+
+};
+
+export default ComplaintFormPage; 

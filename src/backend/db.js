@@ -1,0 +1,55 @@
+// db.js
+const { Pool } = require("pg");
+
+/* -----------------------------------------------------
+   🎯 Strategy Pattern — Environment-specific configs
+------------------------------------------------------ */
+const dbConfigs = {
+  development: {
+    user: "postgres",
+    host: "localhost",
+    database: "du_hall_hub",
+    password: "Ashesh_127",
+    port: 5432,
+  },
+  production: {
+    user: process.env.DB_USER,
+    host: process.env.DB_HOST,
+    database: process.env.DB_NAME,
+    password: process.env.DB_PASS,
+    port: process.env.DB_PORT || 5432,
+    ssl: { rejectUnauthorized: false },
+  },
+};
+
+/* -----------------------------------------------------
+   🏭 Factory Pattern — Creates Pool based on env
+------------------------------------------------------ */
+class DatabaseFactory {
+  static createPool(env = "development") {
+    const config = dbConfigs[env] || dbConfigs.development;
+    return new Pool(config);
+  }
+}
+
+/* -----------------------------------------------------
+   🔁 Singleton Pattern — One shared DB instance
+------------------------------------------------------ */
+class Database {
+  constructor() {
+    if (!Database.instance) {
+      const env = process.env.NODE_ENV || "development";
+      this.pool = DatabaseFactory.createPool(env);
+      Database.instance = this;
+    }
+    return Database.instance;
+  }
+
+  getPool() {
+    return this.pool;
+  }
+}
+
+const dbInstance = new Database().getPool();
+module.exports = dbInstance;
+

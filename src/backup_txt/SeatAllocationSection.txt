@@ -1,0 +1,282 @@
+import React, { useState, useEffect } from "react";
+import FloorChart from "./FloorChart";
+import StudentSeat from "./StudentSeat";
+
+const SeatAllocationSection = ({ user }) => {
+  const [allocated, setAllocated] = useState([]);
+  const [waiting, setWaiting] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState("allocated");
+  const [search, setSearch] = useState("");
+  const [yearFilter, setYearFilter] = useState("");
+  const [buildingFilter, setBuildingFilter] = useState("");
+  const [floor, setFloor] = useState(2);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  // Only fetch for authority
+  useEffect(() => {
+    if (user?.role !== "authority") return;
+
+    const fetchData = async () => {
+      try {
+        const allocatedRes = await fetch("http://localhost:5000/api/admin/students/allocated");
+        const waitingRes = await fetch("http://localhost:5000/api/admin/students/waiting");
+
+        setAllocated(await allocatedRes.json());
+        setWaiting(await waitingRes.json());
+      } catch (err) {
+        console.error("Error fetching students:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [user?.role]);
+
+  // Student view — pass the actual student row (user.user) into StudentSeat
+  if (user?.role === "student") return <StudentSeat user={user} />;
+
+
+  // Authority view
+  if (user?.role === "authority") {
+    if (loading) return <p>Loading student data...</p>;
+
+    return (
+      
+      <div style={{ padding: "20px" }}>
+        <h2>Authority: Student List</h2>
+
+        {/* Tabs */}
+        <div style={{ marginBottom: "15px" }}>
+          <button
+            onClick={() => setTab("allocated")}
+            style={{
+              marginRight: "10px",
+              background: tab === "allocated" ? "#007bff" : "#ccc",
+              color: "white",
+              padding: "8px 16px",
+              border: "none",
+              borderRadius: "4px",
+              cursor: "pointer",
+            }}
+          >
+            Allocated Students
+          </button>
+          <button
+            onClick={() => setTab("waiting")}
+            style={{
+              background: tab === "waiting" ? "#007bff" : "#ccc",
+              color: "white",
+              padding: "8px 16px",
+              border: "none",
+              borderRadius: "4px",
+              cursor: "pointer",
+            }}
+          >
+            Waiting Students
+          </button>
+
+          <button
+            onClick={async () => {
+              try {
+                const res = await fetch("http://localhost:5000/api/admin/students/update-allocation", {
+                  method: "POST",
+                });
+                const data = await res.json();
+                alert(data.message);
+                // Refresh lists
+                const allocatedRes = await fetch("http://localhost:5000/api/admin/students/allocated");
+                setAllocated(await allocatedRes.json());
+                const waitingRes = await fetch("http://localhost:5000/api/admin/students/waiting");
+                setWaiting(await waitingRes.json());
+              } catch (err) {
+                console.error(err);
+                alert("Error updating allocation");
+              }
+            }}
+            style={{
+              padding: "8px 16px",
+              marginBottom: "15px",
+              background: "#28a745",
+              color: "white",
+              border: "none",
+              borderRadius: "4px",
+              cursor: "pointer",
+            }}
+          >
+            Update Allocation
+          </button>
+        </div>
+
+        {/* Search & Filters */}
+        <div style={{ marginBottom: "15px" }}>
+          <input
+            type="text"
+            placeholder="Search by name or roll..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{ marginRight: "10px", padding: "5px" }}
+          />
+
+          <select value={yearFilter} onChange={(e) => setYearFilter(e.target.value)} style={{ marginRight: "10px", padding: "5px" }}>
+            <option value="">All Years</option>
+            <option value="1">1st Year</option>
+            <option value="2">2nd Year</option>
+            <option value="3">3rd Year</option>
+            <option value="4">4th Year</option>
+          </select>
+
+          {tab === "allocated" && (
+            <select value={buildingFilter} onChange={(e) => setBuildingFilter(e.target.value)} style={{ padding: "5px" }}>
+              <option value="">All Buildings</option>
+              <option value="Main Building">Main Building</option>
+              <option value="Extension 1">Extension 1</option>
+              <option value="Extension 2">Extension 2</option>
+            </select>
+          )}
+        </div>
+
+        {/* Floor Chart */}
+        <div style={{ marginBottom: "20px" }}>
+          <FloorChart building={buildingFilter || "Main Building"} floor={floor} refreshTrigger={refreshTrigger} />
+        </div>
+
+        {/* Floor Selector */}
+        <label>Floor: </label>
+        <select value={floor} onChange={(e) => setFloor(Number(e.target.value))} style={{ marginBottom: "20px", marginLeft: "10px" }}>
+          <option value={3}>3rd Floor</option>
+          <option value={2}>2nd Floor</option>
+          <option value={1}>1st Floor</option>
+        </select>
+
+        {/* Allocated Students Table */}
+        {tab === "allocated" && (
+          <table border="1" cellPadding="10" style={{ borderCollapse: "collapse", width: "100%" }}>
+            <thead style={{ background: "#f2f2f2" }}>
+              <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Roll No</th>
+                <th>CGPA</th>
+                <th>Year</th>
+                <th>Score</th>
+                <th>Building</th>
+                <th>Floor</th>
+                <th>Room</th>
+                <th>Expiry Date</th>
+                <th>Actions</th> {/* NEW */}
+              </tr>
+            </thead>
+            <tbody>
+              {allocated
+                .filter(
+                  (s) =>
+                    (s.name.toLowerCase().includes(search.toLowerCase()) ||
+                      s.roll_no.toLowerCase().includes(search.toLowerCase())) &&
+                    (yearFilter ? s.year === parseInt(yearFilter) : true) &&
+                    (buildingFilter ? s.building_name === buildingFilter : true)
+                )
+                .map((s) => (
+                  <tr key={s.student_id}>
+                    <td>{s.student_id}</td>
+                    <td>{s.name}</td>
+                    <td>{s.roll_no}</td>
+                    <td>{s.cgpa}</td>
+                    <td>{s.year}</td>
+                    <td>{s.score}</td>
+                    <td>{s.building_name}</td>
+                    <td>{s.floor_number}</td>
+                    <td>{s.room_number}</td>
+                    <td>{new Date(s.expiry_date).toLocaleDateString()}</td>
+                    <td>
+              <button
+  onClick={async () => {
+    const confirmDismiss = window.confirm(
+      `Are you sure you want to dismiss seat of ${s.name} (${s.roll_no})?`
+    );
+    if (!confirmDismiss) return;
+
+    try {
+      const res = await fetch(
+        `http://localhost:5000/api/admin/students/${s.student_id}/dismiss`,
+        { method: "POST" }
+      );
+      const data = await res.json();
+      alert(data.message);
+
+      // Refresh allocated list
+      const allocatedRes = await fetch("http://localhost:5000/api/admin/students/allocated");
+      setAllocated(await allocatedRes.json());
+
+      // Trigger floor chart refresh
+      setRefreshTrigger(prev => prev + 1);
+    } catch (err) {
+      console.error(err);
+      alert("Error dismissing student");
+    }
+  }}
+  style={{
+                  background: "#dc3545",
+                  color: "white",
+                  border: "none",
+                  padding: "5px 10px",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                }}
+>
+  Dismiss
+</button>
+
+            </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        )}
+
+        {/* Waiting Students Table */}
+        {tab === "waiting" && (
+          <table border="1" cellPadding="10" style={{ borderCollapse: "collapse", width: "100%" }}>
+            <thead style={{ background: "#f2f2f2" }}>
+              <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Roll No</th>
+                <th>CGPA</th>
+                <th>Year</th>
+                <th>Score</th>
+                <th>Added On</th>
+              </tr>
+            </thead>
+            <tbody>
+              {waiting
+                .filter(
+                  (s) =>
+                    (s.name.toLowerCase().includes(search.toLowerCase()) ||
+                      s.roll_no.toLowerCase().includes(search.toLowerCase())) &&
+                    (yearFilter ? s.year === parseInt(yearFilter) : true)
+                )
+                .map((s) => (
+                  <tr key={s.student_id}>
+                    <td>{s.student_id}</td>
+                    <td>{s.name}</td>
+                    <td>{s.roll_no}</td>
+                    <td>{s.cgpa}</td>
+                    <td>{s.year}</td>
+                    <td>{s.score}</td>
+                    <td>{new Date(s.added_on).toLocaleDateString()}</td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    );
+  }
+
+  // Fallback if no user
+  return <p>Please log in to see this page.</p>;
+};
+
+export default SeatAllocationSection;

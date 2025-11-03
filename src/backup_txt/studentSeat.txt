@@ -1,0 +1,263 @@
+import React, { useState, useEffect, useCallback } from "react";
+import { Box, Typography, Card, CardContent, Button, Grid, Paper } from "@mui/material";
+
+function StudentSeat({ user }) {
+  const [seat, setSeat] = useState(null);
+  const [files, setFiles] = useState({ resultCard: null, hallCard: null });
+  const [loading, setLoading] = useState(true);
+
+  // Resolve student object
+  const resolveStudentObj = (u) => {
+    if (!u) return null;
+    let cur = u;
+    for (let i = 0; i < 4; i++) {
+      if (!cur) return null;
+      // accept common variants (snake_case and camelCase)
+      if (
+        cur.all_student_id ||
+        cur.allStudentId ||
+        cur.student_id ||
+        cur.studentId ||
+        cur.id
+      )
+        return cur;
+      if (cur.user && typeof cur.user === "object") {
+        cur = cur.user;
+        continue;
+      }
+      return null;
+    }
+    return null;
+  };
+
+  // Robust student id extractor (handles multiple key shapes and nesting)
+  const extractIdFromObj = (obj) => {
+    if (!obj) return null;
+    const keys = [
+      "allStudentId",
+      "all_student_id",
+      "all_studentId",
+      "allStudent_id",
+      "studentId",
+      "student_id",
+      "id",
+    ];
+    for (const k of keys) {
+      if (Object.prototype.hasOwnProperty.call(obj, k) && obj[k] !== undefined && obj[k] !== null) {
+        return obj[k];
+      }
+    }
+    return null;
+  };
+
+  const getStudentId = () => {
+    // 1) search in the passed `user` prop (including nested user.user)
+    let cur = user;
+    for (let i = 0; i < 6; i++) {
+      if (!cur) break;
+      const found = extractIdFromObj(cur);
+      if (found) return found;
+      cur = cur.user;
+    }
+
+    // 2) fallback to localStorage saved user
+    try {
+      const saved = localStorage.getItem("user");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        cur = parsed;
+        for (let i = 0; i < 6; i++) {
+          if (!cur) break;
+          const found = extractIdFromObj(cur);
+          if (found) return found;
+          cur = cur.user;
+        }
+      }
+    } catch (err) {
+      console.error("Error reading user from localStorage:", err);
+    }
+
+    return null;
+  };
+
+  const studentObj = resolveStudentObj(user);
+  let studentId = getStudentId();
+
+  console.log("DEBUG → user:", user);
+  console.log("DEBUG → studentObj:", studentObj);
+  console.log("DEBUG → final studentId:", studentId);
+
+  const fetchSeat = useCallback(async () => {
+    if (!studentId) {
+      setSeat({ hasSeat: false });
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch(`http://localhost:5000/api/admin/students/my-seat/${studentId}`);
+      if (!res.ok) {
+        setSeat({ hasSeat: false });
+        return;
+      }
+      const data = await res.json();
+      setSeat(data);
+    } catch (err) {
+      console.error(err);
+      setSeat({ hasSeat: false });
+    } finally {
+      setLoading(false);
+    }
+  }, [studentId]);
+
+  useEffect(() => {
+    fetchSeat();
+  }, [fetchSeat]);
+
+  const handleApply = async (e) => {
+    e.preventDefault();
+    if (!studentId) return alert("Missing student id.");
+
+    if (!files.resultCard || !files.hallCard)
+      return alert("Please select both PDF files.");
+
+    const formData = new FormData();
+    formData.append("resultCard", files.resultCard);
+    formData.append("hallCard", files.hallCard);
+
+    try {
+      const res = await fetch(
+        `http://localhost:5000/api/admin/students/apply/${studentId}`,
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
+      const data = await res.json();
+      if (!res.ok) return alert(data?.error || data?.message);
+
+      alert(data?.message || "Application submitted!");
+      setSeat(
+        data.seat ? { hasSeat: true, seat: data.seat } : { hasSeat: false }
+      );
+    } catch (err) {
+      console.error(err);
+      alert("Network error: " + err.message);
+    }
+  };
+
+  const handleWithdraw = async () => {
+    if (!studentId) return alert("Missing student id.");
+    try {
+      const res = await fetch(`http://localhost:5000/api/admin/students/withdraw/${studentId}`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) return alert(data?.error || data?.message);
+
+      alert(data?.message || "Seat withdrawn!");
+      setSeat({ hasSeat: false });
+    } catch (err) {
+      console.error(err);
+      alert("Network error: " + err.message);
+    }
+  };
+
+  if (loading) return <Typography>Loading seat info...</Typography>;
+
+  return (
+  <Box sx={{ position: 'relative', minHeight: '100vh', width: '100%', overflow: 'hidden', bgcolor: 'white' }}>
+    {/* Dark Blue Half + Circles */}
+    <Box
+      sx={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '50%',
+        bgcolor: '#0B3D91',
+        zIndex: 0,
+      }}
+    >
+      {/* Circle 1 */}
+      <Box
+        sx={{
+          position: 'absolute',
+          width: 200,
+          height: 200,
+          borderRadius: '50%',
+          bgcolor: 'rgba(255,255,255,0.1)',
+          top: '20%',
+          left: '30%',
+        }}
+      />
+      {/* Circle 2 */}
+      <Box
+        sx={{
+          position: 'absolute',
+          width: 250,
+          height: 250,
+          borderRadius: '50%',
+          bgcolor: 'rgba(255,255,255,0.15)',
+          top: '25%',
+          left: '40%',
+        }}
+      />
+    </Box>
+
+    {/* Content */}
+    <Box
+      sx={{
+        position: 'relative',
+        zIndex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 4,
+        pt: 12, // space from top to avoid overlapping the dark blue section
+        px: 2,
+      }}
+    >
+      {/* ---------------- Seat Details ---------------- */}
+      <Card sx={{ width: '100%', maxWidth: 500, p: 3, borderRadius: 3, boxShadow: 3, bgcolor: 'white' }}>
+        <CardContent>
+          <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>Seat Details</Typography>
+          {seat?.hasSeat ? (
+            <Grid container spacing={2}>
+              <Grid item xs={6}><Typography><b>Building:</b> {seat.seat.building_name}</Typography></Grid>
+              <Grid item xs={6}><Typography><b>Floor:</b> {seat.seat.floor_number}</Typography></Grid>
+              <Grid item xs={6}><Typography><b>Room:</b> {seat.seat.room_number}</Typography></Grid>
+              <Grid item xs={6}><Typography><b>Expiry:</b> {new Date(seat.seat.expiry_date).toLocaleDateString()}</Typography></Grid>
+              <Grid item xs={12}>
+                <Button variant="contained" color="error" fullWidth sx={{ mt: 1 }} onClick={handleWithdraw}>Withdraw Seat</Button>
+              </Grid>
+            </Grid>
+          ) : (
+            <Typography>No seat allocated yet.</Typography>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ---------------- Apply Form ---------------- */}
+      <Paper sx={{ p: 3, width: '100%', maxWidth: 500, borderRadius: 3, boxShadow: 3, bgcolor: 'white' }}>
+        <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>Apply for a Seat</Typography>
+        <Box component="form" onSubmit={handleApply} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Box>
+            <Typography variant="body1" sx={{ mb: 1 }}>Upload Result Card</Typography>
+            <input type="file" accept="application/pdf" onChange={(e) => setFiles({ ...files, resultCard: e.target.files[0] })} required />
+          </Box>
+          <Box>
+            <Typography variant="body1" sx={{ mb: 1 }}>Upload Hall Card</Typography>
+            <input type="file" accept="application/pdf" onChange={(e) => setFiles({ ...files, hallCard: e.target.files[0] })} required />
+          </Box>
+          <Button variant="contained" color="primary" type="submit" fullWidth>Apply for Seat</Button>
+        </Box>
+      </Paper>
+    </Box>
+  </Box>
+);
+
+}
+
+export default StudentSeat;
