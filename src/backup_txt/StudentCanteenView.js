@@ -182,7 +182,7 @@ const handleDeleteReview = async (reviewId, itemId) => {
             <CardContent>
               <Typography variant="h6">{item.name}</Typography>
               <Typography variant="body2" color="textSecondary">{item.description}</Typography>
-              <Typography variant="h5" sx={{ mt: 1 }}>₹{item.price}</Typography>
+              <Typography variant="h5" sx={{ mt: 1 }}>৳{item.price}</Typography>
               <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
                 <Rating value={parseFloat(item.average_rating)} readOnly size="small" />
                 <Typography variant="caption" sx={{ ml: 1 }}>

@@ -343,7 +343,7 @@ const CanteenSection = ({ user }) => {
                         <Box sx={{ display: "flex", gap: 1, mb: 1 }}>
                           <Chip
                             icon={<AttachMoneyIcon />}
-                            label={`₹${item.price}`}
+                            label={`৳${item.price}`}
                             color="primary"
                             size="small"
                           />
@@ -462,7 +462,7 @@ const CanteenSection = ({ user }) => {
                     }
                   />
                   <TextField
-                    label="Price (₹)"
+                    label="Price (৳)"
                     fullWidth
                     type="number"
                     value={newItem.price}

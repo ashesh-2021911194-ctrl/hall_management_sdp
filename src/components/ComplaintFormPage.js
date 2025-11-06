@@ -446,6 +446,22 @@ const ComplaintFormPage = ({ user }) => {
                   <Typography variant="caption" sx={{ color: '#0B3D91' }}>
                     {complaint.studentName} — {complaint.date}
                   </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+    {userRole === "authority" && (
+      <FormControl size="small" sx={{ minWidth: 120 }}>
+        <InputLabel>Status</InputLabel>
+        <Select
+          value={complaint.status}
+          label="Status"
+          onChange={(e) => handleStatusChange(complaint.id, e.target.value)}
+        >
+          <MenuItem value="pending">Pending</MenuItem>
+          <MenuItem value="in-progress">In Progress</MenuItem>
+          <MenuItem value="resolved">Resolved</MenuItem>
+          <MenuItem value="rejected">Rejected</MenuItem>
+        </Select>
+      </FormControl>
+    )}
                   <Button
                     variant="outlined"
                     size="small"
@@ -465,6 +481,7 @@ const ComplaintFormPage = ({ user }) => {
                   >
                     View Details
                   </Button>
+                  </Box>
                 </Box>
               </Card>
             </Grid>
