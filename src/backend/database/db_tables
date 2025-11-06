@@ -1,0 +1,257 @@
+CREATE TABLE IF NOT EXISTS public.all_students
+(
+    all_student_id integer NOT NULL DEFAULT nextval('all_students_all_student_id_seq'::regclass),
+    name text COLLATE pg_catalog."default" NOT NULL,
+    roll_no text COLLATE pg_catalog."default" NOT NULL,
+    cgpa numeric(3,2),
+    year integer,
+    merit_rank integer,
+    password text COLLATE pg_catalog."default" NOT NULL,
+    CONSTRAINT all_students_pkey PRIMARY KEY (all_student_id),
+    CONSTRAINT all_students_roll_no_key UNIQUE (roll_no)
+)
+
+
+CREATE TABLE IF NOT EXISTS public.allocations
+(
+    allocation_id integer NOT NULL DEFAULT nextval('allocations_allocation_id_seq'::regclass),
+    student_id integer,
+    room_id integer,
+    allocation_run_id bigint,
+    allocated_at timestamp without time zone DEFAULT now(),
+    expiry_date date,
+    active boolean DEFAULT true,
+    score numeric,
+    CONSTRAINT allocations_pkey PRIMARY KEY (allocation_id),
+    CONSTRAINT allocations_room_id_fkey FOREIGN KEY (room_id)
+        REFERENCES public.rooms (room_id) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE NO ACTION,
+    CONSTRAINT allocations_student_id_fkey FOREIGN KEY (student_id)
+        REFERENCES public.students (student_id) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE NO ACTION
+)
+
+
+
+CREATE TABLE IF NOT EXISTS public.authority
+(
+    authority_id integer NOT NULL DEFAULT nextval('authority_authority_id_seq'::regclass),
+    username text COLLATE pg_catalog."default" NOT NULL,
+    password text COLLATE pg_catalog."default" NOT NULL,
+    name text COLLATE pg_catalog."default",
+    CONSTRAINT authority_pkey PRIMARY KEY (authority_id),
+    CONSTRAINT authority_username_key UNIQUE (username)
+)
+
+
+
+CREATE TABLE IF NOT EXISTS public.buildings
+(
+    building_id integer NOT NULL DEFAULT nextval('buildings_building_id_seq'::regclass),
+    building_name character varying(50) COLLATE pg_catalog."default",
+    CONSTRAINT buildings_pkey PRIMARY KEY (building_id)
+)
+
+
+
+CREATE TABLE IF NOT EXISTS public.canteen_items
+(
+    item_id integer NOT NULL DEFAULT nextval('canteen_items_item_id_seq'::regclass),
+    name text COLLATE pg_catalog."default" NOT NULL,
+    description text COLLATE pg_catalog."default",
+    price numeric(10,2) NOT NULL,
+    category text COLLATE pg_catalog."default" NOT NULL,
+    available boolean DEFAULT true,
+    preparation_time text COLLATE pg_catalog."default",
+    rating numeric(3,2) DEFAULT 0,
+    created_by integer NOT NULL,
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT canteen_items_pkey PRIMARY KEY (item_id),
+    CONSTRAINT fk_authority FOREIGN KEY (created_by)
+        REFERENCES public.authority (authority_id) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE NO ACTION
+)
+
+
+
+CREATE TABLE IF NOT EXISTS public.canteen_reviews
+(
+    review_id integer NOT NULL DEFAULT nextval('canteen_reviews_review_id_seq'::regclass),
+    item_id integer NOT NULL,
+    user_id text COLLATE pg_catalog."default" NOT NULL,
+    rating numeric(3,2) NOT NULL,
+    comment text COLLATE pg_catalog."default",
+    review_date timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    student_name text COLLATE pg_catalog."default",
+    all_student_id integer,
+    roll_no character varying(50) COLLATE pg_catalog."default",
+    CONSTRAINT canteen_reviews_pkey PRIMARY KEY (review_id),
+    CONSTRAINT fk_all_students FOREIGN KEY (all_student_id)
+        REFERENCES public.all_students (all_student_id) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE SET NULL,
+    CONSTRAINT fk_canteen_item FOREIGN KEY (item_id)
+        REFERENCES public.canteen_items (item_id) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE CASCADE
+)
+
+
+
+CREATE TABLE IF NOT EXISTS public.complaints
+(
+    complaint_id integer NOT NULL DEFAULT nextval('complaints_complaint_id_seq'::regclass),
+    student_id integer,
+    title text COLLATE pg_catalog."default" NOT NULL,
+    description text COLLATE pg_catalog."default" NOT NULL,
+    status text COLLATE pg_catalog."default" DEFAULT 'Pending'::text,
+    response text COLLATE pg_catalog."default",
+    created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    responded_at timestamp without time zone,
+    CONSTRAINT complaints_pkey PRIMARY KEY (complaint_id),
+    CONSTRAINT complaints_student_id_fkey FOREIGN KEY (student_id)
+        REFERENCES public.students (student_id) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE CASCADE
+)
+
+
+
+CREATE TABLE IF NOT EXISTS public.floors
+(
+    floor_id integer NOT NULL DEFAULT nextval('floors_floor_id_seq'::regclass),
+    building_id integer,
+    floor_number integer,
+    CONSTRAINT floors_pkey PRIMARY KEY (floor_id),
+    CONSTRAINT floors_building_id_fkey FOREIGN KEY (building_id)
+        REFERENCES public.buildings (building_id) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE NO ACTION
+)
+
+
+
+CREATE TABLE IF NOT EXISTS public.notice_documents
+(
+    id integer NOT NULL DEFAULT nextval('notice_documents_id_seq'::regclass),
+    notice_id integer,
+    file_path text COLLATE pg_catalog."default" NOT NULL,
+    uploaded_at timestamp without time zone DEFAULT now(),
+    CONSTRAINT notice_documents_pkey PRIMARY KEY (id),
+    CONSTRAINT notice_documents_notice_id_fkey FOREIGN KEY (notice_id)
+        REFERENCES public.notices (notice_id) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE CASCADE
+)
+
+
+
+CREATE TABLE IF NOT EXISTS public.notices
+(
+    notice_id integer NOT NULL DEFAULT nextval('notices_notice_id_seq'::regclass),
+    title text COLLATE pg_catalog."default" NOT NULL,
+    content text COLLATE pg_catalog."default" NOT NULL,
+    importance character varying(10) COLLATE pg_catalog."default" DEFAULT 'medium'::character varying,
+    requires_document boolean DEFAULT false,
+    document_title text COLLATE pg_catalog."default",
+    document_description text COLLATE pg_catalog."default",
+    created_at timestamp without time zone DEFAULT now(),
+    created_by integer,
+    document_url text COLLATE pg_catalog."default",
+    CONSTRAINT notices_pkey PRIMARY KEY (notice_id),
+    CONSTRAINT notices_created_by_fkey FOREIGN KEY (created_by)
+        REFERENCES public.authority (authority_id) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE NO ACTION,
+    CONSTRAINT notices_importance_check CHECK (importance::text = ANY (ARRAY['low'::character varying, 'medium'::character varying, 'high'::character varying]::text[]))
+)
+
+
+
+CREATE TABLE IF NOT EXISTS public.notifications
+(
+    notification_id integer NOT NULL DEFAULT nextval('notifications_notification_id_seq'::regclass),
+    all_student_id integer NOT NULL,
+    type character varying(50) COLLATE pg_catalog."default" NOT NULL,
+    message text COLLATE pg_catalog."default" NOT NULL,
+    read boolean DEFAULT false,
+    created_at timestamp without time zone DEFAULT now(),
+    link character varying(255) COLLATE pg_catalog."default" DEFAULT NULL::character varying,
+    CONSTRAINT notifications_pkey PRIMARY KEY (notification_id),
+    CONSTRAINT notifications_all_student_id_fkey FOREIGN KEY (all_student_id)
+        REFERENCES public.all_students (all_student_id) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE NO ACTION
+)
+
+
+
+CREATE TABLE IF NOT EXISTS public.rooms
+(
+    room_id integer NOT NULL DEFAULT nextval('rooms_room_id_seq'::regclass),
+    floor_id integer,
+    room_number integer,
+    capacity integer DEFAULT 4,
+    current_occupancy integer DEFAULT 0,
+    CONSTRAINT rooms_pkey PRIMARY KEY (room_id),
+    CONSTRAINT rooms_floor_id_fkey FOREIGN KEY (floor_id)
+        REFERENCES public.floors (floor_id) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE NO ACTION
+)
+
+
+
+CREATE TABLE IF NOT EXISTS public.seat_applications
+(
+    application_id integer NOT NULL DEFAULT nextval('seat_applications_application_id_seq'::regclass),
+    student_id integer,
+    result_card text COLLATE pg_catalog."default" NOT NULL,
+    hall_card text COLLATE pg_catalog."default" NOT NULL,
+    status character varying(20) COLLATE pg_catalog."default" DEFAULT 'Pending'::character varying,
+    submitted_at timestamp without time zone DEFAULT now(),
+    result_name character varying(200) COLLATE pg_catalog."default",
+    result_roll_no character varying(100) COLLATE pg_catalog."default",
+    result_cgpa numeric(3,2),
+    result_year integer,
+    result_session character varying(50) COLLATE pg_catalog."default",
+    CONSTRAINT seat_applications_pkey PRIMARY KEY (application_id),
+    CONSTRAINT seat_applications_student_id_fkey FOREIGN KEY (student_id)
+        REFERENCES public.all_students (all_student_id) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE NO ACTION
+)
+
+
+
+CREATE TABLE IF NOT EXISTS public.students
+(
+    student_id integer NOT NULL DEFAULT nextval('students_student_id_seq'::regclass),
+    name character varying(100) COLLATE pg_catalog."default" NOT NULL,
+    roll_no character varying(20) COLLATE pg_catalog."default" NOT NULL,
+    cgpa numeric(3,2) NOT NULL,
+    year integer NOT NULL,
+    merit_rank integer NOT NULL,
+    score numeric,
+    CONSTRAINT students_pkey PRIMARY KEY (student_id),
+    CONSTRAINT students_roll_no_key UNIQUE (roll_no)
+)
+
+
+
+CREATE TABLE IF NOT EXISTS public.waiting_list
+(
+    id integer NOT NULL DEFAULT nextval('waiting_list_id_seq'::regclass),
+    student_id integer,
+    score numeric,
+    added_on timestamp without time zone DEFAULT now(),
+    CONSTRAINT waiting_list_pkey PRIMARY KEY (id),
+    CONSTRAINT waiting_list_student_id_fkey FOREIGN KEY (student_id)
+        REFERENCES public.students (student_id) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE NO ACTION
+)
