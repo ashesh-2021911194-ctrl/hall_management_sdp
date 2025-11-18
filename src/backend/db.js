@@ -23,11 +23,12 @@ const dbConfigs = {
 };
 
 /* -----------------------------------------------------
-   🏭 Factory Pattern — Creates Pool based on env
+   🏭 Factory Pattern — Creates Pool based on environment
 ------------------------------------------------------ */
 class DatabaseFactory {
   static createPool(env = "development") {
     const config = dbConfigs[env] || dbConfigs.development;
+    console.log(`🏭 DatabaseFactory: Creating pool for '${env}' environment`);
     return new Pool(config);
   }
 }
@@ -38,9 +39,13 @@ class DatabaseFactory {
 class Database {
   constructor() {
     if (!Database.instance) {
+      console.log("🆕 Singleton: No existing instance found. Creating new DB connection pool...");
       const env = process.env.NODE_ENV || "development";
       this.pool = DatabaseFactory.createPool(env);
       Database.instance = this;
+      console.log("✅ Singleton: Database instance created successfully!");
+    } else {
+      console.log("♻️ Singleton: Reusing existing DB connection pool instance.");
     }
     return Database.instance;
   }
@@ -50,6 +55,10 @@ class Database {
   }
 }
 
+/* -----------------------------------------------------
+   🌐 Export the single shared pool instance
+------------------------------------------------------ */
 const dbInstance = new Database().getPool();
 module.exports = dbInstance;
+
 

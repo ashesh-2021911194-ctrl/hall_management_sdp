@@ -33,17 +33,28 @@ import StudentCanteenView from "../backup_txt/StudentCanteenView";
 
 /* ============================================
    🏭 [Factory Pattern]
-   ApiFactory centralizes all backend endpoints.
-   Keeps URL definitions consistent and changeable in one place.
+   ApiFactory centralizes backend endpoints.
+   Logs confirm factory method usage.
 ============================================ */
 const ApiFactory = {
-  getMenu: () => "http://localhost:5000/api/authority/canteen-menu",
-  addItem: () => "http://localhost:5000/api/authority/canteen-menu",
-  deleteItem: (id) =>
-    `http://localhost:5000/api/authority/canteen-menu/${id}`,
-  toggleAvailability: (id) =>
-    `http://localhost:5000/api/authority/canteen-menu/${id}/availability`,
+  getMenu: () => {
+    console.log("🏭 ApiFactory: Returning endpoint for 'getMenu'");
+    return "http://localhost:5000/api/authority/canteen-menu";
+  },
+  addItem: () => {
+    console.log("🏭 ApiFactory: Returning endpoint for 'addItem'");
+    return "http://localhost:5000/api/authority/canteen-menu";
+  },
+  deleteItem: (id) => {
+    console.log(`🏭 ApiFactory: Returning endpoint for 'deleteItem' with id=${id}`);
+    return `http://localhost:5000/api/authority/canteen-menu/${id}`;
+  },
+  toggleAvailability: (id) => {
+    console.log(`🏭 ApiFactory: Returning endpoint for 'toggleAvailability' with id=${id}`);
+    return `http://localhost:5000/api/authority/canteen-menu/${id}/availability`;
+  },
 };
+
 
 /* ============================================
    🧠 [Strategy Pattern]

@@ -254,35 +254,133 @@ router.get("/my-seat/:studentId", async (req, res) => {
 
 
 // routes/students.js
+/* =========================================================
+   🎯 STRATEGY PATTERN — ID Mapping Strategies
+   Tries several strategies to resolve the incoming param into
+   the internal students.student_id (number or via all_students)
+   ========================================================= */
+const IdMapper = {
+  async map(rawId, client) {
+    // try numeric student_id first
+    const asNumber = Number(rawId);
+    if (!Number.isNaN(asNumber)) {
+      const check = await client.query(`SELECT student_id FROM students WHERE student_id = $1 LIMIT 1`, [asNumber]);
+      if (check.rows.length > 0) return check.rows[0].student_id;
+
+      // try mapping as all_student_id
+      const map = await client.query(
+        `SELECT s.student_id FROM all_students a JOIN students s ON a.roll_no = s.roll_no WHERE a.all_student_id = $1 LIMIT 1`,
+        [asNumber]
+      );
+      if (map.rows.length > 0) return map.rows[0].student_id;
+    }
+
+    // fallback: try raw string as all_student_id
+    const map2 = await client.query(
+      `SELECT s.student_id FROM all_students a JOIN students s ON a.roll_no = s.roll_no WHERE a.all_student_id = $1 LIMIT 1`,
+      [rawId]
+    );
+    if (map2.rows.length > 0) return map2.rows[0].student_id;
+
+    return null;
+  },
+};
+
+/* =========================================================
+   🗄️ REPOSITORY PATTERN — Data access encapsulation
+   AllocationsRepo & RoomsRepo centralize DB operations so the
+   higher-level withdraw logic is easier to test and read.
+   ========================================================= */
+const AllocationsRepo = {
+  async getActiveByStudentId(studentId, client) {
+    const r = await client.query(`SELECT allocation_id, room_id FROM allocations WHERE student_id = $1 AND active = TRUE`, [studentId]);
+    return r.rows;
+  },
+  async deactivateByIds(allocationIds, client) {
+    if (!allocationIds || allocationIds.length === 0) return [];
+    const r = await client.query(`UPDATE allocations SET active = FALSE WHERE allocation_id = ANY($1::int[]) RETURNING allocation_id`, [allocationIds]);
+    return r.rows.map(rr => rr.allocation_id);
+  }
+};
+
+const RoomsRepo = {
+  async decrementOccupancy(roomIds, client) {
+    for (const rid of roomIds) {
+      await client.query(`UPDATE rooms SET current_occupancy = GREATEST(current_occupancy - 1, 0) WHERE room_id = $1`, [rid]);
+    }
+  }
+};
+
+/* =========================================================
+   🧭 TEMPLATE METHOD — Transaction Template
+   Wraps the BEGIN / COMMIT / ROLLBACK boilerplate so business
+   logic can be implemented as a simple function.
+   ========================================================= */
+const TransactionTemplate = {
+  async run(work) {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await work(client);
+      await client.query("COMMIT");
+      return result;
+    } catch (err) {
+      try { await client.query("ROLLBACK"); } catch (e) { console.error("Rollback failed:", e); }
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+};
+
+/* =========================================================
+   ⚙️ COMMAND PATTERN — WithdrawCommand
+   Encapsulates the withdraw operation (map id, deactivate allocations,
+   decrement room occupancy) as a reusable command.
+   ========================================================= */
+const WithdrawCommand = {
+  async execute(rawId) {
+    return TransactionTemplate.run(async (client) => {
+      const internalId = await IdMapper.map(rawId, client);
+      if (!internalId) {
+        // keep behavior identical: surface not-found
+        const err = new Error("Student not found");
+        err.status = 404;
+        throw err;
+      }
+
+      const allocs = await AllocationsRepo.getActiveByStudentId(internalId, client);
+      if (!allocs || allocs.length === 0) {
+        const err = new Error("No active allocation found for this student.");
+        err.status = 404;
+        throw err;
+      }
+
+      const allocationIds = allocs.map(r => r.allocation_id);
+      const roomIds = Array.from(new Set(allocs.map(r => r.room_id)));
+
+      console.log(`withdraw: deactivating allocations ${allocationIds.join(', ')} for student_id ${internalId}`);
+
+      const deactivated = await AllocationsRepo.deactivateByIds(allocationIds, client);
+      await RoomsRepo.decrementOccupancy(roomIds, client);
+
+      return { deactivatedCount: deactivated.length, allocation_ids: deactivated };
+    });
+  }
+};
+
 router.post("/withdraw/:studentId", async (req, res) => {
-  const { studentId } = req.params;
-
-  const client = await pool.connect();
+  const rawId = req.params.studentId;
   try {
-    await client.query("BEGIN");
-
-    // Deactivate seat
-    await client.query(`
-      UPDATE allocations SET active = FALSE
-      WHERE student_id = $1 AND active = TRUE
-    `, [studentId]);
-
-    // Free one seat in room
-    await client.query(`
-      UPDATE rooms SET current_occupancy = current_occupancy - 1
-      WHERE room_id IN (
-        SELECT room_id FROM allocations WHERE student_id = $1
-      )
-    `, [studentId]);
-
-    await client.query("COMMIT");
-    res.json({ message: "Seat withdrawn successfully" });
+    const result = await WithdrawCommand.execute(rawId);
+    return res.json({ message: "Seat withdrawn successfully", deactivated: result.deactivatedCount, allocation_ids: result.allocation_ids });
   } catch (err) {
-    await client.query("ROLLBACK");
+    if (err.status === 404) {
+      console.warn(`withdraw: ${err.message} for param '${rawId}'`);
+      return res.status(404).json({ error: err.message });
+    }
     console.error("Error withdrawing seat:", err);
-    res.status(500).json({ error: "Database error" });
-  } finally {
-    client.release();
+    return res.status(500).json({ error: "Database error" });
   }
 });
 
@@ -575,11 +673,14 @@ await client.query(
 });
 
 // GET /students/:allStudentId/notifications
-router.get("/:allStudentId/notifications", async (req, res) => {
-  const allStudentId = parseInt(req.params.allStudentId, 10);
-  if (isNaN(allStudentId)) return res.status(400).json({ error: "Invalid student ID" });
-
-  try {
+/* =========================================================
+  🗄️ REPOSITORY PATTERN — NotificationsRepo (Facade)
+  Encapsulates notification DB access (getByAllStudentId, markRead).
+  Provides a stable interface for higher-level services and makes
+  it easier to test, cache, or replace notification persistence.
+  ========================================================= */
+const NotificationsRepo = {
+  async getByAllStudentId(allStudentId) {
     const result = await pool.query(
       `SELECT notification_id AS id, type, message, read, created_at AS date, link
        FROM notifications
@@ -587,7 +688,25 @@ router.get("/:allStudentId/notifications", async (req, res) => {
        ORDER BY created_at DESC`,
       [allStudentId]
     );
-    res.json(result.rows);
+    return result.rows;
+  },
+
+  async markRead(allStudentId, notificationId) {
+    const result = await pool.query(
+      `UPDATE notifications SET read = TRUE
+       WHERE all_student_id = $1 AND notification_id = $2 RETURNING notification_id AS id`,
+      [allStudentId, notificationId]
+    );
+    return result.rows;
+  }
+};
+router.get("/:allStudentId/notifications", async (req, res) => {
+  const allStudentId = parseInt(req.params.allStudentId, 10);
+  if (isNaN(allStudentId)) return res.status(400).json({ error: "Invalid student ID" });
+
+  try {
+    const rows = await NotificationsRepo.getByAllStudentId(allStudentId);
+    res.json(rows);
   } catch (err) {
     console.error("Error fetching notifications:", err);
     res.status(500).json({ error: "Database error" });
@@ -599,12 +718,9 @@ router.get("/:allStudentId/notifications", async (req, res) => {
 router.post("/:allStudentId/notifications/:notificationId/read", async (req, res) => {
   const { allStudentId, notificationId } = req.params;
   try {
-    await pool.query(
-      `UPDATE notifications SET read = TRUE
-       WHERE all_student_id = $1 AND notification_id = $2`,
-      [allStudentId, notificationId]
-    );
-    res.json({ message: "Notification marked as read." });
+    const updated = await NotificationsRepo.markRead(allStudentId, notificationId);
+    if (updated.length === 0) return res.status(404).json({ error: 'Notification not found' });
+    res.json({ message: "Notification marked as read.", notification_id: updated[0].id });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Database error" });
@@ -749,45 +865,6 @@ router.get("/complaints/:allStudentId", async (req, res) => {
   }
 });
 
-// POST /api/admin/students/:allStudentId/complaints — create new complaint
-/*router.post("/:allStudentId/complaints", async (req, res) => {
-  const allStudentId = parseInt(req.params.allStudentId, 10);
-  console.log("POST complaints - allStudentId:", allStudentId);
-  const { title, description, category, priority } = req.body;
-
-  if (isNaN(allStudentId)) {
-    return res.status(400).json({ error: "Invalid student ID" });
-  }
-
-  try {
-    // Map all_student_id → student_id
-    const mapResult = await pool.query(
-      `SELECT student_id 
-       FROM students 
-       WHERE roll_no = (SELECT roll_no FROM all_students WHERE all_student_id = $1)`,
-      [allStudentId]
-    );
-
-    if (mapResult.rows.length === 0) {
-      return res.status(404).json({ error: "Student not found in hall" });
-    }
-
-    const studentId = mapResult.rows[0].student_id;
-
-    // Insert complaint
-    const result = await pool.query(
-      `INSERT INTO complaints (student_id, title, description, category, priority, status)
-       VALUES ($1, $2, $3, $4, $5, 'pending')
-       RETURNING *`,
-      [studentId, title, description, category, priority]
-    );
-
-    res.status(201).json(result.rows[0]);
-  } catch (err) {
-    console.error("Error creating complaint:", err);
-    res.status(500).json({ error: "Server error" });
-  }
-});*/
 // GET canteen menu (accessible to all - students & authority)
 router.get("/canteen-menu", async (req, res) => {
   try {

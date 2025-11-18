@@ -7,7 +7,19 @@ import {
   CardContent,
   Paper,
   Grid,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemSecondaryAction,
+  IconButton,
+  Divider,
+  Badge,
 } from "@mui/material";
+import NotificationsIcon from '@mui/icons-material/Notifications';
+import DoneIcon from '@mui/icons-material/Done';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import { Collapse } from '@mui/material';
 
 /* =========================================================
    🏭 FACTORY PATTERN — Centralized endpoint creation
@@ -18,6 +30,26 @@ const StudentApiFactory = {
   seatUrl: (id) => `${StudentApiFactory.base}/my-seat/${id}`,
   applyUrl: (id) => `${StudentApiFactory.base}/apply/${id}`,
   withdrawUrl: (id) => `${StudentApiFactory.base}/withdraw/${id}`,
+};
+
+/* =========================================================
+   🧭 TEMPLATE METHOD — RequestTemplate
+   Centralizes fetch/json/error handling for frontend API calls
+   so commands and services can reuse consistent behavior.
+   ========================================================= */
+const RequestTemplate = {
+  async request(url, options = {}) {
+    const res = await fetch(url, options);
+    let data = null;
+    try { data = await res.json(); } catch (e) { /* ignore non-json */ }
+    if (!res.ok) {
+      const err = new Error(data?.error || data?.message || 'Request failed');
+      err.status = res.status;
+      err.payload = data;
+      throw err;
+    }
+    return data;
+  }
 };
 
 /* =========================================================
@@ -118,19 +150,23 @@ const ApplyCommand = async (studentId, files, setSeat) => {
   }
 };
 
-const WithdrawCommand = async (studentId, setSeat) => {
-  if (!studentId) return alert("Missing student id.");
-  try {
-    const res = await fetch(StudentApiFactory.withdrawUrl(studentId), {
-      method: "POST",
-    });
-    const data = await res.json();
-    if (!res.ok) return alert(data?.error || data?.message);
-    alert(data?.message || "Seat withdrawn!");
-    setSeat({ hasSeat: false });
-  } catch (err) {
-    console.error("Error withdrawing seat:", err);
-    alert("Network error: " + err.message);
+/* =========================================================
+   ⚙️ COMMAND PATTERN — WithdrawCommand
+   Uses RequestTemplate for API interaction and exposes
+   an execute() method so the UI can treat it as a command.
+   ========================================================= */
+const WithdrawCommand = {
+  async execute(studentId, setSeat) {
+    if (!studentId) return alert("Missing student id.");
+    try {
+      const data = await RequestTemplate.request(StudentApiFactory.withdrawUrl(studentId), { method: 'POST' });
+      alert(data?.message || "Seat withdrawn!");
+      setSeat({ hasSeat: false });
+    } catch (err) {
+      console.error("Error withdrawing seat:", err);
+      if (err.status) return alert(err.message);
+      alert("Network error: " + err.message);
+    }
   }
 };
 
@@ -142,6 +178,104 @@ export default function StudentSeat({ user }) {
   const studentId = extractStudentId(user);
   const { seat, setSeat, loading } = useSeatData(studentId);
   const [files, setFiles] = useState({ resultCard: null, hallCard: null });
+  const [notifications, setNotifications] = useState([]);
+  const [notifLoading, setNotifLoading] = useState(true);
+  const [notifOpen, setNotifOpen] = useState(true);
+
+  /* =========================================================
+     👁️ OBSERVER PATTERN — NotificationService (singleton)
+     - subscribe(studentId, cb) -> returns unsubscribe fn
+     - markRead(studentId, notificationId)
+     - refresh(studentId)
+     Internal cache keeps latest notifications per studentId and
+     notifies subscribers on updates.
+     ========================================================= */
+  const NotificationService = React.useMemo(() => {
+    const subscribers = new Map(); // studentId -> Set(callback)
+    const cache = new Map(); // studentId -> notifications[]
+
+    const notify = (studentId) => {
+      const subs = subscribers.get(studentId);
+      if (!subs) return;
+      const payload = cache.get(studentId) || [];
+      subs.forEach((cb) => {
+        try { cb(payload); } catch (e) { console.error('subscriber callback error', e); }
+      });
+    };
+
+    const fetchNotifications = async (studentId) => {
+      if (!studentId) return [];
+      try {
+        const data = await RequestTemplate.request(`${StudentApiFactory.base}/${studentId}/notifications`);
+        cache.set(studentId, data);
+        notify(studentId);
+        return data;
+      } catch (err) {
+        console.error('NotificationService.fetchNotifications error', err);
+        cache.set(studentId, []);
+        notify(studentId);
+        return [];
+      }
+    };
+
+    return {
+      subscribe(studentId, cb) {
+        if (!subscribers.has(studentId)) subscribers.set(studentId, new Set());
+        subscribers.get(studentId).add(cb);
+        // deliver cached immediately if available
+        if (cache.has(studentId)) cb(cache.get(studentId));
+        else fetchNotifications(studentId).catch(() => {});
+        return () => {
+          const set = subscribers.get(studentId);
+          if (set) set.delete(cb);
+        };
+      },
+
+      async markRead(studentId, notificationId) {
+        if (!studentId) throw new Error('Missing studentId');
+        try {
+          await RequestTemplate.request(`${StudentApiFactory.base}/${studentId}/notifications/${notificationId}/read`, { method: 'POST' });
+          // optimistic update in cache
+          const list = (cache.get(studentId) || []).map(n => n.id === notificationId ? { ...n, read: true } : n);
+          cache.set(studentId, list);
+          notify(studentId);
+          return list;
+        } catch (err) {
+          console.error('NotificationService.markRead error', err);
+          throw err;
+        }
+      },
+
+      refresh(studentId) { return fetchNotifications(studentId); }
+    };
+  }, []);
+
+  // Subscribe to notifications via NotificationService (Observer)
+  useEffect(() => {
+    setNotifLoading(true);
+    if (!studentId) {
+      setNotifications([]);
+      setNotifLoading(false);
+      return;
+    }
+
+    const unsub = NotificationService.subscribe(studentId, (data) => {
+      setNotifications(data);
+      setNotifLoading(false);
+    });
+
+    return () => { unsub(); };
+  }, [studentId, NotificationService]);
+
+  const markNotificationRead = async (notificationId) => {
+    if (!studentId) return;
+    try {
+      await NotificationService.markRead(studentId, notificationId);
+      // NotificationService updates subscribers (including this component)
+    } catch (err) {
+      console.error('Error marking notification read:', err);
+    }
+  };
 
   console.log("DEBUG → studentId:", studentId);
   console.log("DEBUG → seat:", seat);
@@ -208,6 +342,63 @@ export default function StudentSeat({ user }) {
         }}
       >
         {/* ======= Seat Details ======= */}
+        {/* ======= Notifications ======= */}
+        <Paper sx={{ width: "100%", maxWidth: 500, p: 0, borderRadius: 3, boxShadow: 3, bgcolor: "white", overflow: 'hidden' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography variant="h6" sx={{ fontWeight: 600 }}>Notifications</Typography>
+              <Badge color="error" badgeContent={notifications.filter(n => !n.read).length}>
+                <NotificationsIcon />
+              </Badge>
+            </Box>
+            <IconButton
+              aria-label={notifOpen ? 'collapse notifications' : 'expand notifications'}
+              onClick={() => setNotifOpen(open => !open)}
+              size="small"
+              sx={{ transform: notifOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 200ms' }}
+            >
+              <ExpandMoreIcon />
+            </IconButton>
+          </Box>
+
+          <Collapse in={notifOpen} timeout="auto" unmountOnExit>
+            <Box sx={{ p: 2 }}>
+              {notifLoading ? (
+                <Typography>Loading notifications...</Typography>
+              ) : notifications.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">No notifications</Typography>
+              ) : (
+                <List dense>
+                  {notifications.map((n) => (
+                    <React.Fragment key={n.id}>
+                      <ListItem alignItems="flex-start" sx={{ py: 0.5 }}>
+                        <ListItemText
+                          primary={n.message}
+                          secondary={new Date(n.date).toLocaleString()}
+                          sx={{ opacity: n.read ? 0.6 : 1 }}
+                        />
+                        <ListItemSecondaryAction>
+                          {!n.read && (
+                            <IconButton edge="end" size="small" onClick={() => markNotificationRead(n.id)}>
+                              <DoneIcon fontSize="small" />
+                            </IconButton>
+                          )}
+                          {n.link && (
+                            <IconButton edge="end" size="small" onClick={() => window.open(n.link, '_blank')}>
+                              <OpenInNewIcon fontSize="small" />
+                            </IconButton>
+                          )}
+                        </ListItemSecondaryAction>
+                      </ListItem>
+                      <Divider component="li" />
+                    </React.Fragment>
+                  ))}
+                </List>
+              )}
+            </Box>
+          </Collapse>
+        </Paper>
+
         <Card
           sx={{
             width: "100%",
@@ -246,12 +437,12 @@ export default function StudentSeat({ user }) {
                   </Typography>
                 </Grid>
                 <Grid item xs={12}>
-                  <Button
+                    <Button
                     variant="contained"
                     color="error"
                     fullWidth
                     sx={{ mt: 1 }}
-                    onClick={() => WithdrawCommand(studentId, setSeat)}
+                    onClick={() => WithdrawCommand.execute(studentId, setSeat)}
                   >
                     Withdraw Seat
                   </Button>
