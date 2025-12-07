@@ -7,7 +7,9 @@ CREATE TABLE IF NOT EXISTS public.all_students
     year integer,
     merit_rank integer,
     password text COLLATE pg_catalog."default" NOT NULL,
+    email text COLLATE pg_catalog."default",
     CONSTRAINT all_students_pkey PRIMARY KEY (all_student_id),
+    CONSTRAINT all_students_email_key UNIQUE (email),
     CONSTRAINT all_students_roll_no_key UNIQUE (roll_no)
 )
 
@@ -69,6 +71,8 @@ CREATE TABLE IF NOT EXISTS public.canteen_items
     created_by integer NOT NULL,
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
+    meal_type character varying(50) COLLATE pg_catalog."default",
+    food_type character varying(50) COLLATE pg_catalog."default",
     CONSTRAINT canteen_items_pkey PRIMARY KEY (item_id),
     CONSTRAINT fk_authority FOREIGN KEY (created_by)
         REFERENCES public.authority (authority_id) MATCH SIMPLE
@@ -112,7 +116,14 @@ CREATE TABLE IF NOT EXISTS public.complaints
     response text COLLATE pg_catalog."default",
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
     responded_at timestamp without time zone,
+    complaint_type character varying(100) COLLATE pg_catalog."default",
+    building character varying(50) COLLATE pg_catalog."default" DEFAULT 'Unknown'::character varying,
+    floor_no character varying(20) COLLATE pg_catalog."default" DEFAULT 'Unknown'::character varying,
+    block_no character varying(20) COLLATE pg_catalog."default",
+    room_no character varying(20) COLLATE pg_catalog."default",
+    is_custom boolean DEFAULT false,
     CONSTRAINT complaints_pkey PRIMARY KEY (complaint_id),
+    CONSTRAINT unique_complaint_global UNIQUE (complaint_type, building, floor_no, block_no),
     CONSTRAINT complaints_student_id_fkey FOREIGN KEY (student_id)
         REFERENCES public.students (student_id) MATCH SIMPLE
         ON UPDATE NO ACTION
@@ -237,6 +248,8 @@ CREATE TABLE IF NOT EXISTS public.students
     year integer NOT NULL,
     merit_rank integer NOT NULL,
     score numeric,
+    faculty character varying(50) COLLATE pg_catalog."default",
+    department character varying(100) COLLATE pg_catalog."default",
     CONSTRAINT students_pkey PRIMARY KEY (student_id),
     CONSTRAINT students_roll_no_key UNIQUE (roll_no)
 )

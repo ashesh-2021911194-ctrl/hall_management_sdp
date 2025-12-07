@@ -13,7 +13,7 @@ import StaffInfoPage from "./components/StaffInfoPage";
 import ComplaintFormPage from "./components/ComplaintFormPage";
 import SeatAllocationSection from "./components/SeatAllocationSection";
 import LoginPage from "./components/LoginPage";
-import SignupForm from "./components/SignupForm";
+import SignupPage from "./components/SignupPage";
 
 /* -----------------------------------------------------
    🏭 Theme Factory Pattern
@@ -73,7 +73,7 @@ function App() {
         <Router>
           <Routes>
             <Route path="/" element={<LoginPage setUser={handleSetUser} />} />
-            <Route path="/signup" element={<SignupForm />} />
+            <Route path="/signup" element={<SignupPage />} />
             <Route path="/home" element={<PrivateRoute user={user} element={<HomePage user={user} />} />} />
             <Route path="/documents" element={<PrivateRoute user={user} element={<DocumentUploadForm user={user} />} />} />
             <Route path="/profile" element={<PrivateRoute user={user} element={<ProfilePage user={user} />} />} />

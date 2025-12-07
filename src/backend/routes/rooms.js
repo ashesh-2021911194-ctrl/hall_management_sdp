@@ -3,11 +3,11 @@ const express = require("express");
 const router = express.Router();
 const pool = require("../db");
 
-/* -----------------------------------------------------
-   🧱 Repository Pattern — Handles all DB interactions
------------------------------------------------------- */
-class RoomRepository {
-  static async getRoomsByBuildingAndFloor(building, floor) {
+/* ======================================================
+   📦 DAO Pattern — Direct SQL operations (Data Access)
+====================================================== */
+class RoomDAO {
+  async fetchRooms(building, floor) {
     return pool.query(
       `
       SELECT r.room_id, r.room_number, r.capacity, r.current_occupancy
@@ -21,7 +21,7 @@ class RoomRepository {
     );
   }
 
-  static async getStudentsByRoomId(roomId) {
+  async fetchStudents(roomId) {
     return pool.query(
       `
       SELECT s.student_id, s.name, s.roll_no, s.cgpa, s.year, a.expiry_date
@@ -35,9 +35,26 @@ class RoomRepository {
   }
 }
 
-/* -----------------------------------------------------
-   💼 Service Layer — Business logic + error handling
------------------------------------------------------- */
+/* ======================================================
+   🧱 Repository Pattern — Uses DAO for queries
+====================================================== */
+class RoomRepository {
+  constructor(dao) {
+    this.dao = dao;
+  }
+
+  async getRoomsByBuildingAndFloor(building, floor) {
+    return this.dao.fetchRooms(building, floor);
+  }
+
+  async getStudentsByRoomId(roomId) {
+    return this.dao.fetchStudents(roomId);
+  }
+}
+
+/* ======================================================
+   💼 Service Layer — Business logic
+====================================================== */
 class RoomService {
   constructor(repository) {
     this.repository = repository;
@@ -47,10 +64,7 @@ class RoomService {
     if (!building || !floor)
       throw new Error("Building name and floor number are required.");
 
-    const result = await this.repository.getRoomsByBuildingAndFloor(
-      building,
-      Number(floor)
-    );
+    const result = await this.repository.getRoomsByBuildingAndFloor(building, Number(floor));
     return result.rows;
   }
 
@@ -60,21 +74,23 @@ class RoomService {
   }
 }
 
-/* -----------------------------------------------------
-   🏭 Factory Pattern — Creates service instance
------------------------------------------------------- */
+/* ======================================================
+   🏭 Factory Pattern — Creates service with DAO + Repository
+====================================================== */
 class ServiceFactory {
   static createRoomService() {
-    return new RoomService(RoomRepository);
+    const dao = new RoomDAO();
+    const repo = new RoomRepository(dao);
+    return new RoomService(repo);
   }
 }
 
-/* -----------------------------------------------------
-   🚀 Routes — Clean, thin, & testable
------------------------------------------------------- */
+/* ======================================================
+   🚀 Routes — Clean & Testable
+====================================================== */
 const roomService = ServiceFactory.createRoomService();
 
-// ✅ Get Rooms by Building & Floor
+// Get Rooms by Building & Floor
 router.get("/", async (req, res) => {
   const { building, floor } = req.query;
 
@@ -87,7 +103,7 @@ router.get("/", async (req, res) => {
   }
 });
 
-// ✅ Get Students in a Room
+// Get Students in a Room
 router.get("/:roomId/students", async (req, res) => {
   const { roomId } = req.params;
 

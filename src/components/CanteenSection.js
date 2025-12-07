@@ -29,7 +29,7 @@ import SearchIcon from "@mui/icons-material/Search";
 import AttachMoneyIcon from "@mui/icons-material/AttachMoney";
 import TimerIcon from "@mui/icons-material/Timer";
 import StarIcon from "@mui/icons-material/Star";
-import StudentCanteenView from "../backup_txt/StudentCanteenView";
+import StudentCanteenView from "./StudentCanteenView";
 
 /* ============================================
    🏭 [Factory Pattern]
@@ -70,6 +70,10 @@ const MenuFormatter = {
         ? parseFloat(item.price)
         : 0,
     reviews: Array.isArray(item.reviews) ? item.reviews : [],
+    // normalize snake_case from backend to camelCase used in UI
+    mealType: item.mealType || item.meal_type || "",
+    foodType: item.foodType || item.food_type || "",
+    preparationTime: item.preparationTime || item.preparation_time || "",
   }),
 };
 
@@ -115,10 +119,13 @@ const MenuCommand = {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...newItem,
-          price: parseFloat(newItem.price),
-          created_by: 1,
-        }),
+  ...newItem,
+  mealType: newItem.mealType,      // ✅ ADD HERE
+  foodType: newItem.foodType,      // ✅ ADD HERE
+  price: parseFloat(newItem.price),
+  created_by: 1,
+}),
+
       });
       const newItemData = await response.json();
       const formatted = MenuFormatter.defaultFormat(newItemData);
@@ -146,9 +153,12 @@ const MenuCommand = {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        ...updatedData,
-        price: parseFloat(updatedData.price),
-      }),
+  ...updatedData,
+  mealType: updatedData.mealType,   // ✅ ADD HERE
+  foodType: updatedData.foodType,   // ✅ ADD HERE
+  price: parseFloat(updatedData.price),
+}),
+
     });
     const updated = await response.json();
     setMenu(menu.map((m) => (m.item_id === updated.item_id ? updated : m)));
@@ -183,29 +193,36 @@ const CanteenSection = ({ user }) => {
   const theme = useTheme();
   const { menu, setMenu, loading, error, setError } = useMenuData();
   const [searchQuery, setSearchQuery] = useState("");
+  const [mealFilter, setMealFilter] = useState("");
+  const [foodFilter, setFoodFilter] = useState("");
   const [openDialog, setOpenDialog] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
   const [newItem, setNewItem] = useState({
-    name: "",
-    description: "",
-    price: "",
-    category: "",
-    available: true,
-    preparationTime: "",
-  });
+  name: "",
+  description: "",
+  price: "",
+  mealType: "",      // NEW
+  foodType: "",      // NEW
+  available: true,
+  preparationTime: "",
+});
+
+  
 
   const userRole = user?.role || "student";
 
   const handleEditItem = (item) => {
     setSelectedItem(item);
     setNewItem({
-      name: item.name,
-      description: item.description,
-      price: item.price.toString(),
-      category: item.category,
-      available: item.available,
-      preparationTime: item.preparation_time,
-    });
+  name: item.name,
+  description: item.description,
+  price: item.price.toString(),
+  mealType: item.mealType,      // NEW
+  foodType: item.foodType,      // NEW
+  available: item.available,
+  preparationTime: item.preparation_time,
+});
+
     setOpenDialog(true);
   };
 
@@ -222,12 +239,21 @@ const CanteenSection = ({ user }) => {
     });
   };
 
-  const filteredMenu = menu.filter(
-    (item) =>
-      item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.category.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredMenu = menu.filter((item) => {
+    
+  const matchesSearch =
+    item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    item.description.toLowerCase().includes(searchQuery.toLowerCase());
+
+  const matchesMeal =
+    mealFilter === "" || ((item.mealType || "").toString().toLowerCase() === mealFilter.toString().toLowerCase());
+
+  const matchesFood =
+    foodFilter === "" || ((item.foodType || "").toString().toLowerCase() === foodFilter.toString().toLowerCase());
+
+  return matchesSearch && matchesMeal && matchesFood;
+});
+
 
   if (loading)
     return (
@@ -316,6 +342,36 @@ const CanteenSection = ({ user }) => {
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </Paper>
+            <Box sx={{ display: "flex", gap: 2, mb: 3 }}>
+  <TextField
+    select
+    label="Filter by Meal Type"
+    value={mealFilter}
+    onChange={(e) => setMealFilter(e.target.value)}
+    sx={{ width: 200 }}
+    SelectProps={{ native: true }}
+  >
+    <option value="">All</option>
+    <option value="Breakfast">Breakfast</option>
+    <option value="Lunch">Lunch</option>
+    <option value="Dinner">Dinner</option>
+  </TextField>
+
+  <TextField
+    select
+    label="Filter by Food Type"
+    value={foodFilter}
+    onChange={(e) => setFoodFilter(e.target.value)}
+    sx={{ width: 200 }}
+    SelectProps={{ native: true }}
+  >
+    <option value="">All</option>
+    <option value="Main Course">Main Course</option>
+    <option value="Dessert">Dessert</option>
+    <option value="Snacks">Snacks</option>
+    <option value="Curry">Curry</option>
+  </TextField>
+</Box>
 
             {/* Menu List */}
             <List>
@@ -357,6 +413,7 @@ const CanteenSection = ({ user }) => {
                             label={`৳${item.price}`}
                             color="primary"
                             size="small"
+                            
                           />
                           <Chip
                             icon={<TimerIcon />}
@@ -375,6 +432,9 @@ const CanteenSection = ({ user }) => {
                             color="warning"
                             size="small"
                           />
+                          <Chip label={item.mealType} color="success" size="small" />
+<Chip label={item.foodType} color="info" size="small" />
+
                           {!item.available && (
                             <Chip
                               label="Not Available"
@@ -501,6 +561,38 @@ const CanteenSection = ({ user }) => {
                     }
                     placeholder="e.g., 15-20 mins"
                   />
+                  <TextField
+  select
+  label="Meal Type"
+  fullWidth
+  value={newItem.mealType}
+  onChange={(e) =>
+    setNewItem({ ...newItem, mealType: e.target.value })
+  }
+  SelectProps={{ native: true }}
+>
+  <option value="">Select Meal Type</option>
+  <option value="Breakfast">Breakfast</option>
+  <option value="Lunch">Lunch</option>
+  <option value="Dinner">Dinner</option>
+</TextField>
+                  <TextField
+  select
+  label="Food Type"
+  fullWidth
+  value={newItem.foodType}
+  onChange={(e) =>
+    setNewItem({ ...newItem, foodType: e.target.value })
+  }
+  SelectProps={{ native: true }}
+>
+  <option value="">Select Food Type</option>
+  <option value="Main Course">Main Course</option>
+  <option value="Dessert">Dessert</option>
+  <option value="Snacks">Snacks</option>
+  <option value="Curry">Curry</option>
+</TextField>
+
                 </Box>
               </DialogContent>
               <DialogActions>

@@ -474,12 +474,17 @@ router.put("/complaints/:id/status", async (req, res) => {
 
 
 
-// GET all canteen items
+// GET all canteen items with aggregated reviews
 router.get("/canteen-menu", async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT * FROM canteen_items 
-      ORDER BY created_at DESC
+      SELECT ci.*, 
+             COALESCE(AVG(cr.rating), 0) as average_rating,
+             COUNT(cr.review_id) as review_count
+      FROM canteen_items ci
+      LEFT JOIN canteen_reviews cr ON ci.item_id = cr.item_id
+      GROUP BY ci.item_id
+      ORDER BY ci.created_at DESC
     `);
     res.json(result.rows);
   } catch (err) {
@@ -490,16 +495,27 @@ router.get("/canteen-menu", async (req, res) => {
 
 // POST - Add new item (Authority only)
 router.post("/canteen-menu", async (req, res) => {
-  const { name, description, price, category, preparationTime, created_by } = req.body;
+  const { 
+  name, 
+  description, 
+  price, 
+  category, 
+  preparationTime, 
+  mealType,      // NEW
+  foodType,      // NEW
+  created_by 
+} = req.body;
+
   
   try {
     const result = await pool.query(
-      `INSERT INTO canteen_items 
-       (name, description, price, category, preparation_time, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING *`,
-      [name, description, price, category, preparationTime, created_by]
-    );
+  `INSERT INTO canteen_items 
+   (name, description, price, category, preparation_time, meal_type, food_type, created_by)
+   VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+   RETURNING *`,
+  [name, description, price, category, preparationTime, mealType, foodType, created_by]
+);
+
     res.json(result.rows[0]);
   } catch (err) {
     console.error("Error adding item:", err);
@@ -510,17 +526,33 @@ router.post("/canteen-menu", async (req, res) => {
 // PUT - Edit item (Authority only)
 router.put("/canteen-menu/:itemId", async (req, res) => {
   const { itemId } = req.params;
-  const { name, description, price, category, preparationTime } = req.body;
+  const { 
+  name, 
+  description, 
+  price, 
+  category, 
+  preparationTime, 
+  mealType,      // NEW
+  foodType       // NEW
+} = req.body;
+
   
   try {
     const result = await pool.query(
-      `UPDATE canteen_items 
-       SET name = $1, description = $2, price = $3, category = $4, 
-           preparation_time = $5, updated_at = CURRENT_TIMESTAMP
-       WHERE item_id = $6
-       RETURNING *`,
-      [name, description, price, category, preparationTime, itemId]
-    );
+  `UPDATE canteen_items 
+   SET name = $1, 
+       description = $2, 
+       price = $3, 
+       category = $4, 
+       preparation_time = $5,
+       meal_type = $6,      -- NEW
+       food_type = $7,      -- NEW
+       updated_at = CURRENT_TIMESTAMP
+   WHERE item_id = $8
+   RETURNING *`,
+  [name, description, price, category, preparationTime, mealType, foodType, itemId]
+);
+
     res.json(result.rows[0]);
   } catch (err) {
     console.error("Error updating item:", err);

@@ -24,14 +24,15 @@ router.get("/allocated", async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT s.student_id, s.name, s.roll_no, s.cgpa, s.year, s.score,
-             a.expiry_date, r.room_number, f.floor_number, b.building_name
-      FROM allocations a
-      JOIN students s ON a.student_id = s.student_id
-      JOIN rooms r ON a.room_id = r.room_id
-      JOIN floors f ON r.floor_id = f.floor_id
-      JOIN buildings b ON f.building_id = b.building_id
-      WHERE a.active = TRUE
-      ORDER BY b.building_name, f.floor_number DESC, r.room_number ASC
+       s.faculty, s.department,
+       a.expiry_date, r.room_number, f.floor_number, b.building_name
+FROM allocations a
+JOIN students s ON a.student_id = s.student_id
+JOIN rooms r ON a.room_id = r.room_id
+JOIN floors f ON r.floor_id = f.floor_id
+JOIN buildings b ON f.building_id = b.building_id
+WHERE a.active = TRUE
+ORDER BY b.building_name, f.floor_number DESC, r.room_number ASC
     `);
     res.json(result.rows);
   } catch (err) {
@@ -44,11 +45,12 @@ router.get("/allocated", async (req, res) => {
 router.get("/waiting", async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT w.student_id, s.name, s.roll_no, s.cgpa, s.year,
-             s.score, w.added_on
-      FROM waiting_list w
-      JOIN students s ON w.student_id = s.student_id
-      ORDER BY s.score DESC, w.added_on ASC
+      SELECT w.student_id, s.name, s.roll_no, s.cgpa, s.year, s.score,
+       s.faculty, s.department,
+       w.added_on
+FROM waiting_list w
+JOIN students s ON w.student_id = s.student_id
+ORDER BY s.score DESC, w.added_on ASC
     `);
     res.json(result.rows);
   } catch (err) {
@@ -788,36 +790,65 @@ router.post("/notices/:noticeId/upload", upload.single("document"), async (req, 
 
 
 router.post("/complaints", async (req, res) => {
-  const { allStudentId, title, description } = req.body;
+  const {
+    allStudentId,
+    title,
+    description,
+    complaint_type,
+    building,
+    floor_no,
+    block_no,
+    room_no,
+    is_custom,
+  } = req.body;
 
-  if (!allStudentId || !title || !description)
+  if (!allStudentId || !building || !floor_no)
     return res.status(400).json({ error: "Missing required fields" });
 
   try {
-    // map allStudentId → student_id
     const mapResult = await pool.query(
       "SELECT student_id FROM students WHERE roll_no = (SELECT roll_no FROM all_students WHERE all_student_id = $1)",
       [allStudentId]
     );
 
-    if (mapResult.rows.length === 0) {
+    if (mapResult.rows.length === 0)
       return res.status(404).json({ error: "Student not found in hall" });
-    }
 
     const studentId = mapResult.rows[0].student_id;
 
     const result = await pool.query(
-      `INSERT INTO complaints (student_id, title, description)
-       VALUES ($1, $2, $3) RETURNING *`,
-      [studentId, title, description]
+      `INSERT INTO complaints 
+      (student_id, title, description, complaint_type, building, floor_no, block_no, room_no, is_custom)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       RETURNING *`,
+      [
+        studentId,
+        title || null,
+        description || null,
+        complaint_type || null,
+        building,
+        floor_no,
+        block_no || null,
+        room_no || null,
+        is_custom || false,
+      ]
     );
 
     res.status(201).json(result.rows[0]);
   } catch (err) {
+
+    // ⭐ ⭐ ⭐ ADD THIS ⭐ ⭐ ⭐
+    if (err.code === "23505") {
+      return res.status(409).json({
+        error: "This complaint already exists and is being processed."
+      });
+    }
+    
     console.error("Error submitting complaint:", err);
     res.status(500).json({ error: "Database error" });
   }
 });
+
 
 
 
@@ -849,7 +880,10 @@ router.get("/complaints/:allStudentId", async (req, res) => {
     
     // Fetch complaints
     const complaintsResult = await pool.query(
-      `SELECT c.*, s.name as student_name 
+      `SELECT 
+  c.*, 
+  s.name as student_name
+ 
        FROM complaints c 
        JOIN students s ON c.student_id = s.student_id 
        WHERE c.student_id = $1 
@@ -944,22 +978,43 @@ router.post("/canteen-menu/:itemId/reviews", async (req, res) => {
   }
 
   const safeComment = (typeof comment === 'string' && comment.trim().length > 0) ? comment.trim() : null;
+  // Ensure we have a non-null user_id (DB schema requires NOT NULL)
+  const finalUserId = (user_id !== undefined && user_id !== null && String(user_id).trim() !== "")
+    ? String(user_id)
+    : String(effectiveAllStudentId);
 
   try {
+    // Validate that the canteen item exists to surface clearer errors
+    const itemCheck = await pool.query(`SELECT item_id FROM canteen_items WHERE item_id = $1 LIMIT 1`, [parsedItemId]);
+    if (itemCheck.rows.length === 0) {
+      return res.status(400).json({ error: 'Invalid item_id: item not found' });
+    }
+
+    // Validate that the all_student_id exists (avoid FK violation)
+    const studentCheck = await pool.query(`SELECT all_student_id FROM all_students WHERE all_student_id = $1 LIMIT 1`, [effectiveAllStudentId]);
+    if (studentCheck.rows.length === 0) {
+      return res.status(400).json({ error: 'Invalid all_student_id: student not found' });
+    }
+
     const result = await pool.query(
       `INSERT INTO canteen_reviews 
        (item_id, all_student_id, student_name, roll_no, rating, comment, user_id)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
-      [parsedItemId, effectiveAllStudentId, student_name || null, roll_no || null, numericRating, safeComment, user_id || null]
+      [parsedItemId, effectiveAllStudentId, student_name || null, roll_no || null, numericRating, safeComment, finalUserId]
     );
 
-    // Return created review
     return res.status(201).json(result.rows[0]);
   } catch (err) {
-    // Log full error and return message to client for local debugging
     console.error('Error adding review (db):', err && err.stack ? err.stack : err);
-    return res.status(500).json({ error: 'Failed to add review', details: err.message });
+    // Include DB error code/constraint for easier debugging locally
+    const details = {
+      message: err && err.message ? err.message : String(err),
+      code: err && err.code ? err.code : undefined,
+      constraint: err && err.constraint ? err.constraint : undefined,
+      detail: err && err.detail ? err.detail : undefined,
+    };
+    return res.status(500).json({ error: 'Failed to add review', details });
   }
 });
 

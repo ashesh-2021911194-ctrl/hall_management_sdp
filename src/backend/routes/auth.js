@@ -20,6 +20,23 @@ class AuthRepository {
       [rollNo, password]
     );
   }
+
+  static async createStudent({ name, roll_no, email, password }) {
+  return pool.query(
+    `INSERT INTO all_students(name, roll_no, email, password)
+     VALUES ($1, $2, $3, $4)
+     RETURNING *`,
+    [name, roll_no, email, password]
+  );
+}
+
+static async checkExisting(email, roll_no) {
+  return pool.query(
+    `SELECT * FROM all_students WHERE email = $1 OR roll_no = $2`,
+    [email, roll_no]
+  );
+}
+
 }
 
 /* -----------------------------------------------------
@@ -108,6 +125,48 @@ router.post("/login", async (req, res) => {
     res.status(400).json({ error: err.message });
   }
 });
+
+router.post("/signup", async (req, res) => {
+  const { email, password } = req.body;
+
+  try {
+    // Check email format
+    const emailRegex = /^[a-z]+-[0-9]{8,10}@[a-z]{2,4}\.du\.ac\.bd$/;
+
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ error: "Invalid institutional email format" });
+    }
+
+    // Extract name & roll
+    const namePart = email.split("-")[0];
+    const roll = email.split("-")[1].split("@")[0];
+
+    // Check existing user
+    const exists = await AuthRepository.checkExisting(email, roll);
+    if (exists.rows.length > 0) {
+      return res.status(400).json({ error: "Account already exists" });
+    }
+
+    // Insert into DB
+    const result = await AuthRepository.createStudent({
+      name: namePart,
+      roll_no: roll,
+      email,
+      password
+    });
+
+    res.status(201).json({
+      message: "Account created successfully",
+      user: result.rows[0],
+      role: "student"
+    });
+
+  } catch (err) {
+    console.error("Signup error:", err);
+    res.status(500).json({ error: "Something went wrong" });
+  }
+});
+
 
 module.exports = router;
 

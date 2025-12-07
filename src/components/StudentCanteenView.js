@@ -54,6 +54,9 @@ const StudentCanteenView = ({ user }) => {
   const [loading, setLoading] = useState(true);
   const [selectedItem, setSelectedItem] = useState(null);
   const [openReviewDialog, setOpenReviewDialog] = useState(false);
+  const [selectedMealType, setSelectedMealType] = useState("");
+  const [selectedFoodType, setSelectedFoodType] = useState("");
+
   const [newReview, setNewReview] = useState({
     rating: 5,
     comment: ''
@@ -70,7 +73,10 @@ const fetchMenu = async () => {
     const response = await fetch("http://localhost:5000/api/authority/canteen-menu");
 
     const data = await response.json();
-    setMenu(data);
+    // Group by meal_type (Breakfast, Lunch, Dinner, etc.)
+setMenu(data);
+
+
     
     // Initialize reviews object for all items
     const reviewsObj = {};
@@ -128,11 +134,36 @@ const fetchReviews = async (itemId) => {
     );
 
     console.log("🟡 Response status:", response.status);
-    const review = await response.json();
-    console.log("🟣 Review response:", review);
 
+    // If response not ok, try to read error body safely and show a helpful message
     if (!response.ok) {
-      alert(`❌ Failed: ${review.error || "Unknown error"}`);
+      let errText = `HTTP ${response.status}`;
+      try {
+        const errBody = await response.json();
+        // Prefer common fields, but if details exist, prefer deeper message
+        if (errBody.details) {
+          const d = errBody.details;
+          errText = errBody.error || d.message || d.detail || d.code || JSON.stringify(d) || errText;
+        } else {
+          errText = errBody.error || errBody.message || JSON.stringify(errBody) || errText;
+        }
+      } catch (e) {
+        // If JSON parse fails, fall back to statusText
+        errText = response.statusText || errText;
+      }
+      alert(`❌ Failed: ${errText}`);
+      return;
+    }
+
+    // Successful response — parse JSON and update reviews
+    let review;
+    try {
+      review = await response.json();
+    } catch (e) {
+      console.error('Failed to parse created review JSON:', e);
+      alert('✅ Review submitted but server returned unexpected response. Please refresh to see it.');
+      setOpenReviewDialog(false);
+      setNewReview({ rating: 5, comment: "" });
       return;
     }
 
@@ -174,9 +205,46 @@ const handleDeleteReview = async (reviewId, itemId) => {
   return (
   <Container maxWidth="lg" sx={{ py: 4 }}>
     <Typography variant="h4" gutterBottom>Canteen Menu</Typography>
-    
+    <Box sx={{ display: "flex", gap: 2, mb: 3 }}>
+  
+  {/* Meal Type Filter */}
+  <TextField
+    select
+    label="Meal Type"
+    value={selectedMealType}
+    onChange={(e) => setSelectedMealType(e.target.value)}
+    sx={{ minWidth: 150 }}
+  >
+    <MenuItem value="">All</MenuItem>
+    <MenuItem value="Breakfast">Breakfast</MenuItem>
+    <MenuItem value="Lunch">Lunch</MenuItem>
+    <MenuItem value="Dinner">Dinner</MenuItem>
+  </TextField>
+
+  {/* Food Type Filter */}
+  <TextField
+    select
+    label="Food Type"
+    value={selectedFoodType}
+    onChange={(e) => setSelectedFoodType(e.target.value)}
+    sx={{ minWidth: 150 }}
+  >
+    <MenuItem value="">All</MenuItem>
+    <MenuItem value="Main Course">Main Course</MenuItem>
+    <MenuItem value="Curry">Curry</MenuItem>
+    <MenuItem value="Snacks">Snacks</MenuItem>
+    <MenuItem value="Desert">Desert</MenuItem>
+  </TextField>
+
+</Box>
+
     <Grid container spacing={2}>
-      {menu.filter(item => item.available).map(item => (
+      {menu
+  .filter(item => item.available)
+  .filter(item => !selectedMealType || item.meal_type === selectedMealType)
+  .filter(item => !selectedFoodType || item.food_type === selectedFoodType)
+  .map(item => (
+
         <Grid item xs={12} sm={6} md={4} key={item.item_id}>
           <Card>
             <CardContent>

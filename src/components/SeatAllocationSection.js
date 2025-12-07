@@ -121,7 +121,7 @@ const SeatAllocationSection = ({ user }) => {
     if (loading) return <p>Loading student data...</p>;
 
     // [Observer Pattern] - state changes re-render the table dynamically
-    const filteredAllocated = allocated.filter(
+    /*const filteredAllocated = allocated.filter(
       (s) =>
         (s.name.toLowerCase().includes(search.toLowerCase()) ||
           s.roll_no.toLowerCase().includes(search.toLowerCase())) &&
@@ -134,7 +134,26 @@ const SeatAllocationSection = ({ user }) => {
         (s.name.toLowerCase().includes(search.toLowerCase()) ||
           s.roll_no.toLowerCase().includes(search.toLowerCase())) &&
         (yearFilter ? s.year === parseInt(yearFilter) : true)
-    );
+    );*/
+    const filteredAllocated = allocated.filter(
+  (s) =>
+    (s.name.toLowerCase().includes(search.toLowerCase()) ||
+     s.roll_no.toLowerCase().includes(search.toLowerCase()) ||
+     (s.faculty?.toLowerCase().includes(search.toLowerCase())) ||   // <-- ADD
+     (s.department?.toLowerCase().includes(search.toLowerCase()))) && // <-- ADD
+    (yearFilter ? s.year === parseInt(yearFilter) : true) &&
+    (buildingFilter ? s.building_name === buildingFilter : true)
+);
+
+const filteredWaiting = waiting.filter(
+  (s) =>
+    (s.name.toLowerCase().includes(search.toLowerCase()) ||
+     s.roll_no.toLowerCase().includes(search.toLowerCase()) ||
+     (s.faculty?.toLowerCase().includes(search.toLowerCase())) ||   // <-- ADD
+     (s.department?.toLowerCase().includes(search.toLowerCase()))) && // <-- ADD
+    (yearFilter ? s.year === parseInt(yearFilter) : true)
+);
+
 
     // =====================================================
     // [Command Pattern]
@@ -360,6 +379,8 @@ const SeatAllocationSection = ({ user }) => {
                 "CGPA",
                 "Year",
                 "Score",
+                "Faculty",        
+                "Department",
                 "Building",
                 "Floor",
                 "Room",
@@ -381,6 +402,8 @@ const SeatAllocationSection = ({ user }) => {
                 <TableCell sx={{ color: "#063a70" }}>{s.cgpa}</TableCell>
                 <TableCell sx={{ color: "#063a70" }}>{s.year}</TableCell>
                 <TableCell sx={{ color: "#063a70" }}>{s.score}</TableCell>
+                <TableCell sx={{ color: "#063a70" }}>{s.faculty}</TableCell>
+                <TableCell sx={{ color: "#063a70" }}>{s.department}</TableCell>
                 <TableCell sx={{ color: "#063a70" }}>{s.building_name}</TableCell>
                 <TableCell sx={{ color: "#063a70" }}>{s.floor_number}</TableCell>
                 <TableCell sx={{ color: "#063a70" }}>{s.room_number}</TableCell>
@@ -417,7 +440,7 @@ const SeatAllocationSection = ({ user }) => {
         <Table>
           <TableHead>
             <TableRow>
-              {["ID", "Name", "Roll No", "CGPA", "Year", "Score", "Added On"].map(
+              {["ID", "Name", "Roll No", "CGPA", "Year", "Score", "Faculty", "Department", "Added On"].map(
                 (head) => (
                   <TableCell key={head} sx={{ color: "#063a70", fontWeight: "bold" }}>
                     {head}
@@ -435,6 +458,9 @@ const SeatAllocationSection = ({ user }) => {
                 <TableCell sx={{ color: "#063a70" }}>{s.cgpa}</TableCell>
                 <TableCell sx={{ color: "#063a70" }}>{s.year}</TableCell>
                 <TableCell sx={{ color: "#063a70" }}>{s.score}</TableCell>
+                <TableCell sx={{ color: "#063a70" }}>{s.faculty}</TableCell>
+                <TableCell sx={{ color: "#063a70" }}>{s.department}</TableCell>
+
                 <TableCell sx={{ color: "#063a70" }}>
                   {new Date(s.added_on).toLocaleDateString()}
                 </TableCell>
