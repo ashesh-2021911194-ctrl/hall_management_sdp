@@ -290,42 +290,51 @@ const HomePage = ({ user }) => {
   const features = featureStrategy.getFeatures();
 
   return (
-    <Box sx={{ bgcolor: theme.palette.background.default, minHeight: "100vh" }}>
+    <Box sx={{ bgcolor: theme.palette.primary, minHeight: "100vh" }}>
+      {/* ======= Dark Blue Half + Circles ======= */}
+            <Box
+              sx={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: "100%",
+                height: "50%",
+                //bgcolor: "#0B3D91",
+                zIndex: 0,
+              }}
+            >
+              <Box
+                sx={{
+                  position: "absolute",
+                  width: 200,
+                  height: 200,
+                  borderRadius: "50%",
+                  bgcolor: "rgba(255,255,255,0.1)",
+                  top: "20%",
+                  left: "30%",
+                }}
+              />
+              <Box
+                sx={{
+                  position: "absolute",
+                  width: 250,
+                  height: 250,
+                  borderRadius: "50%",
+                  bgcolor: "rgba(255,255,255,0.15)",
+                  top: "25%",
+                  left: "40%",
+                }}
+              />
+            </Box>
       {/* Navigation Bar */}
-      <AppBar
-        position="static"
-        elevation={0}
-        sx={{
-          backgroundImage:
-            "linear-gradient(90deg, #1e40af 0%, #1e3a8a 100%)",
-          py: 1.2,
-        }}
-      >
+      <AppBar position="static" sx={{ bgcolor: "white" }}>
         <Toolbar sx={{ justifyContent: "space-between" }}>
-          <Typography variant="h5" sx={{ fontWeight: 700, color: "#fff" }}>
+          <Typography variant="h5" sx={{ fontWeight: 700, color: "#14054bff" }}>
             DU HallHub
           </Typography>
 
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-            {/* Role Switcher */}
-            <ToggleButtonGroup
-              value={userRole}
-              exclusive
-              onChange={(e, value) => value && setUserRole(value)}
-              size="small"
-              sx={{
-                mr: 2,
-                bgcolor: alpha(theme.palette.primary.light, 0.1),
-                borderRadius: 2,
-                "& .Mui-selected": {
-                  bgcolor: theme.palette.primary.main,
-                  color: "#fff !important",
-                },
-              }}
-            >
-              <ToggleButton value="student">Student</ToggleButton>
-              <ToggleButton value="authority">Authority</ToggleButton>
-            </ToggleButtonGroup>
+            
 
             {/* Navigation Links */}
             <Button component={Link} to="/home" sx={{ color: "white" }}>
@@ -388,20 +397,20 @@ const HomePage = ({ user }) => {
               </IconButton>
             )}
 
-            <IconButton color="inherit">
+            <IconButton color="red">
               <LogoutIcon />
             </IconButton>
           </Box>
         </Toolbar>
       </AppBar>
 
-      {/* Hero Section */}
+      {/* Hero Section (neutral background) */}
       <Box
         sx={{
           width: "100%",
           minHeight: 320,
-          background: "linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%)",
-          color: "#fff",
+          background: theme.palette.primary,
+          color: theme.palette.text.primary,
           display: "flex",
           flexDirection: "column",
           justifyContent: "center",
@@ -410,14 +419,14 @@ const HomePage = ({ user }) => {
           pb: 4,
         }}
       >
-        <Typography variant="h3" sx={{ fontWeight: 700, mb: 2 }}>
+        <Typography variant="h3" sx={{ fontWeight: 700, mb: 2, color: theme.palette.text.primary }}>
           Welcome to DU HallHub
         </Typography>
-        <Typography variant="h6" sx={{ mb: 3 }}>
+        <Typography variant="h6" sx={{ mb: 3, color: theme.palette.text.secondary }}>
           Your centralized system for hall management, canteen updates, notices
           & more.
         </Typography>
-        <Button variant="contained" color="secondary">
+        <Button variant="contained" color="primary">
           Read More
         </Button>
       </Box>
@@ -428,8 +437,8 @@ const HomePage = ({ user }) => {
         <Grid container spacing={4} justifyContent="center">
           <Grid item xs={12} md={8}>
             <Paper
-              elevation={3}
-              sx={{ p: 4, borderRadius: 4, bgcolor: "#F1F5F9" }}
+              elevation={0}
+              sx={{ p: 4, borderRadius: 4, bgcolor: 'transparent', boxShadow: 'none' }}
             >
               <Typography
                 variant="h5"

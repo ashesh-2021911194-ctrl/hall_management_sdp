@@ -15,8 +15,6 @@ const SignupPage = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [name, setName] = useState("");
-  const [presentAddress, setPresentAddress] = useState("");
   const navigate = useNavigate();
 
   const handleSignup = async (e) => {
@@ -31,7 +29,7 @@ const SignupPage = () => {
       const res = await fetch("http://localhost:5000/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, name, present_address: presentAddress }),
+        body: JSON.stringify({ email, password }),
       });
 
       const data = await res.json();
@@ -64,24 +62,6 @@ const SignupPage = () => {
             required
           />
 
-            <TextField
-              label="Full Name"
-              fullWidth
-              margin="normal"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-            />
-
-            <TextField
-              label="Present Address"
-              fullWidth
-              margin="normal"
-              value={presentAddress}
-              onChange={(e) => setPresentAddress(e.target.value)}
-              required
-            />
-
           <TextField
             type="password"
             label="Password"
@@ -112,3 +92,50 @@ const SignupPage = () => {
 };
 
 export default SignupPage;
+
+
+
+
+
+
+
+router.post("/signup", async (req, res) => {
+  const { email, password } = req.body;
+
+  try {
+    // Check email format
+    const emailRegex = /^[a-z]+-[0-9]{8,10}@[a-z]{2,4}\.du\.ac\.bd$/;
+
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ error: "Invalid institutional email format" });
+    }
+
+    // Extract name & roll
+    const namePart = email.split("-")[0];
+    const roll = email.split("-")[1].split("@")[0];
+
+    // Check existing user
+    const exists = await AuthRepository.checkExisting(email, roll);
+    if (exists.rows.length > 0) {
+      return res.status(400).json({ error: "Account already exists" });
+    }
+
+    // Insert into DB
+    const result = await AuthRepository.createStudent({
+      name: namePart,
+      roll_no: roll,
+      email,
+      password
+    });
+
+    res.status(201).json({
+      message: "Account created successfully",
+      user: result.rows[0],
+      role: "student"
+    });
+
+  } catch (err) {
+    console.error("Signup error:", err);
+    res.status(500).json({ error: "Something went wrong" });
+  }
+});

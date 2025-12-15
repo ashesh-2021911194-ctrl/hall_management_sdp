@@ -21,12 +21,12 @@ class AuthRepository {
     );
   }
 
-  static async createStudent({ name, roll_no, email, password }) {
+  static async createStudent({ name, roll_no, email, password, present_address }) {
   return pool.query(
-    `INSERT INTO all_students(name, roll_no, email, password)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO all_students(name, roll_no, email, password, present_address)
+     VALUES ($1, $2, $3, $4, $5)
      RETURNING *`,
-    [name, roll_no, email, password]
+    [name, roll_no, email, password, present_address]
   );
 }
 
@@ -127,7 +127,7 @@ router.post("/login", async (req, res) => {
 });
 
 router.post("/signup", async (req, res) => {
-  const { email, password } = req.body;
+  const { email, password, name, present_address } = req.body;
 
   try {
     // Check email format
@@ -137,9 +137,9 @@ router.post("/signup", async (req, res) => {
       return res.status(400).json({ error: "Invalid institutional email format" });
     }
 
-    // Extract name & roll
-    const namePart = email.split("-")[0];
+    // Extract roll (name may be provided by user; fallback to email-derived)
     const roll = email.split("-")[1].split("@")[0];
+    const finalName = name && name.trim().length > 0 ? name.trim() : email.split("-")[0];
 
     // Check existing user
     const exists = await AuthRepository.checkExisting(email, roll);
@@ -149,10 +149,11 @@ router.post("/signup", async (req, res) => {
 
     // Insert into DB
     const result = await AuthRepository.createStudent({
-      name: namePart,
+      name: finalName,
       roll_no: roll,
       email,
-      password
+      password,
+      present_address: present_address || null,
     });
 
     res.status(201).json({

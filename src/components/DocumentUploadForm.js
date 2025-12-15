@@ -140,78 +140,27 @@ const useDocumentData = (role, location) => {
 
   const fetchNotices = useCallback(async () => {
     try {
-      // kept mock notices (original behaviour)
-      const mockNotices = [
-        {
-          id: 1,
-          title: "Important Notice",
-          content: "Please submit your documents by next week.",
-          type: "warning",
-          priority: "high",
-          date: "2024-03-15",
-          requiresDocument: true,
-        },
-        {
-          id: 2,
-          title: "General Information",
-          content: "New facilities are now available.",
-          type: "info",
-          priority: "medium",
-          date: "2024-03-14",
-          requiresDocument: false,
-        },
-      ];
-      setNotices(mockNotices);
-    } catch (err) {
-      setError("Failed to fetch notices");
-    }
-  }, []);
+      // fetch notices from backend depending on role
+      const url = (role === 'authority')
+        ? 'http://localhost:5000/api/authority/notices'
+        : 'http://localhost:5000/api/admin/students/notices';
 
-  const fetchDocumentsMock = useCallback(async () => {
-    try {
-      // original mock behavior (preserve)
-      await new Promise((r) => setTimeout(r, 1000));
-      const mockDocuments = [
-        {
-          id: 1,
-          title: "Hall ID Card",
-          description: "Copy of hall ID card",
-          fileName: "hall_id.pdf",
-          uploadDate: "2024-03-01",
-          status: "pending",
-          noticeId: 1,
-          hallId: "HALL001",
-          noticeTitle: "Important Notice",
-        },
-        {
-          id: 2,
-          title: "Fee Receipt",
-          description: "Latest fee payment receipt",
-          fileName: "fee_receipt.pdf",
-          uploadDate: "2024-03-02",
-          status: "accepted",
-          noticeId: null,
-          hallId: "HALL001",
-        },
-        {
-          id: 3,
-          title: "Medical Certificate",
-          description: "Medical certificate for leave",
-          fileName: "medical_cert.pdf",
-          uploadDate: "2024-03-03",
-          status: "rejected",
-          noticeId: 1,
-          hallId: "HALL001",
-          noticeTitle: "Important Notice",
-        },
-      ];
-      setDocuments(mockDocuments);
+      const res = await fetch(url);
+      if (!res.ok) {
+        throw new Error(`Failed to fetch notices: ${res.status}`);
+      }
+      const data = await res.json();
+      // normalize to array
+      setNotices(data || []);
     } catch (err) {
-      setError("Failed to load documents. Please try again later.");
+      console.error('fetchNotices error', err);
+      setError('Failed to fetch notices');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [role]);
+
+  
 
   const fetchApplications = useCallback(async () => {
     try {
@@ -236,12 +185,12 @@ const useDocumentData = (role, location) => {
       fetchApplications();
     } else {
       // students use local mock behavior + notices
-      Promise.all([fetchDocumentsMock(), fetchNotices()]).catch((err) =>
+      Promise.all([ fetchNotices()]).catch((err) =>
         console.error(err)
       );
     }
     // re-run on location change (keeps original behavior)
-  }, [role, location, fetchApplications, fetchDocumentsMock, fetchNotices]);
+  }, [role, location, fetchApplications, fetchNotices]);
 
   return { documents, setDocuments, notices, setNotices, loading, error, setError, fetchApplications };
 };
@@ -269,6 +218,7 @@ const RoleRenderer = {
     filteredDocuments,
     navigate,
     notices,
+    setSelectedNoticeId,
     handleCloseDialog,
   }) => {
     return (
@@ -306,6 +256,35 @@ const RoleRenderer = {
           <Tab label="All Documents" />
           <Tab label="Required Documents" />
         </Tabs>
+
+        {/* Required notices that ask for uploads */}
+        {Array.isArray(notices) && notices.filter((n) => n.requiresDocument).length > 0 && (
+          <Paper sx={{ p: 2, mb: 3 }} elevation={1}>
+            <Typography variant="h6">Required Documents</Typography>
+            <Box sx={{ display: 'flex', gap: 2, mt: 1, flexWrap: 'wrap' }}>
+              {notices
+                .filter((n) => n.requiresDocument)
+                .map((n) => (
+                  <Paper key={n.id} sx={{ p: 2, minWidth: 240, display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <Box sx={{ flex: 1 }}>
+                      <Typography variant="subtitle1">{n.title}</Typography>
+                      <Typography variant="body2" color="text.secondary">{n.date}</Typography>
+                    </Box>
+                    <Button
+                      variant="outlined"
+                      onClick={() => {
+                        setDocumentTitle(n.title || "");
+                        setSelectedNoticeId?.(n.id);
+                        setOpenDialog(true);
+                      }}
+                    >
+                      Upload
+                    </Button>
+                  </Paper>
+                ))}
+            </Box>
+          </Paper>
+        )}
 
         <TableContainer component={Paper}>
           <Table>
@@ -524,7 +503,7 @@ const RoleRenderer = {
         <Dialog open={openPdf} onClose={() => setOpenPdf(false)} maxWidth="md" fullWidth>
           <DialogTitle>View PDF</DialogTitle>
           <DialogContent>
-            <iframe src={pdfUrl} width="100%" height="600px" style={{ border: "none" }} />
+            <iframe title="PDF Viewer" src={pdfUrl} width="100%" height="600px" style={{ border: "none" }} />
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setOpenPdf(false)}>Close</Button>
@@ -568,6 +547,7 @@ const DocumentUploadForm = ({ user }) => {
   const [hallIdSearch, setHallIdSearch] = useState("");
   const [openPdf, setOpenPdf] = useState(false);
   const [pdfUrl, setPdfUrl] = useState(null);
+  const [selectedNoticeId, setSelectedNoticeId] = useState(null);
 
   // Handlers (thin glue that calls Commands / RoleRenderer)
   const handleFileSelect = (e) => setSelectedFile(e.target.files[0] || null);
@@ -576,10 +556,59 @@ const DocumentUploadForm = ({ user }) => {
     setSelectedFile(null);
     setDocumentTitle("");
     setDocumentDescription("");
+    setSelectedNoticeId(null);
   };
 
-  const handleUploadClick = () => {
+  const handleUploadClick = async () => {
     if (!selectedFile || !documentTitle) return;
+
+    // If upload is for a specific notice, POST multipart/form-data to backend
+    if (selectedNoticeId) {
+      try {
+        const form = new FormData();
+        form.append("document", selectedFile);
+
+        const uploadRes = await fetch(`http://localhost:5000/api/students/notices/${selectedNoticeId}/upload`, {
+          method: "POST",
+          body: form,
+        });
+
+        if (!uploadRes.ok) {
+          const txt = await uploadRes.text().catch(() => "");
+          throw new Error(txt || `Upload failed: ${uploadRes.status}`);
+        }
+
+        // If backend returns JSON with file path/message, we can use it.
+        let uploadJson = {};
+        try {
+          uploadJson = await uploadRes.json();
+        } catch (e) {
+          // ignore parse errors
+        }
+
+        const newDocument = {
+          id: documents.length + 1,
+          title: documentTitle,
+          description: documentDescription,
+          fileName: selectedFile.name,
+          uploadDate: new Date().toISOString().split("T")[0],
+          status: "pending",
+          noticeId: selectedNoticeId,
+          noticeTitle: notices.find((n) => n.id === selectedNoticeId)?.title || null,
+          hallId: "HALL001",
+          studentDocumentUrl: uploadJson.filePath || null,
+        };
+
+        setDocuments((prev) => [newDocument, ...prev]);
+        handleCloseDialog();
+      } catch (err) {
+        console.error("Upload failed:", err);
+        setError("Upload failed. Please try again.");
+      }
+      return;
+    }
+
+    // Fallback/mock behavior (no notice association)
     const newDocument = {
       id: documents.length + 1,
       title: documentTitle,
@@ -639,10 +668,10 @@ const DocumentUploadForm = ({ user }) => {
 
   // Main render: header + role-specific content + upload dialog
   return (
-    <Box sx={{ display: "flex", minHeight: "100vh", bgcolor: "#f8fafc" }}>
+    <Box sx={{ display: "flex", minHeight: "100vh" }}>
       <Container maxWidth="lg" sx={{ py: 4 }}>
         {/* Header */}
-        <Box sx={{ bgcolor: "primary.main", color: "white", p: 4, borderRadius: 2, mb: 4 }}>
+        <Box sx={{ bgcolor: "white", color: "primary.main", p: 4, borderRadius: 2, mb: 4 }}>
           <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
             <Typography variant="h4" gutterBottom>
               Document Management
@@ -654,42 +683,45 @@ const DocumentUploadForm = ({ user }) => {
         </Box>
 
         {/* Role-specific view */}
-        {userRole === "student"
-          ? RoleRenderer.studentView({
-              theme,
-              searchQuery,
-              setSearchQuery,
-              openDialog,
-              setOpenDialog,
-              handleFileSelect,
-              selectedFile,
-              documentTitle,
-              setDocumentTitle,
-              documentDescription,
-              setDocumentDescription,
-              handleUploadClick,
-              activeTab,
-              handleTabChange,
-              filteredDocuments,
-              navigate,
-              notices,
-              handleCloseDialog,
-            })
-          : RoleRenderer.authorityView({
-              theme,
-              searchQuery,
-              setSearchQuery,
-              hallIdSearch,
-              setHallIdSearch,
-              filteredDocuments,
-              handleViewPdf,
-              handleApprove,
-              handleReject,
-              openPdf,
-              pdfUrl,
-              setOpenPdf,
-              navigate,
-            })}
+        {userRole === "student" ? (
+          RoleRenderer.studentView({
+            theme,
+            searchQuery,
+            setSearchQuery,
+            openDialog,
+            setOpenDialog,
+            handleFileSelect,
+            selectedFile,
+            documentTitle,
+            setDocumentTitle,
+            documentDescription,
+            setDocumentDescription,
+            handleUploadClick,
+            activeTab,
+            handleTabChange,
+            filteredDocuments,
+            navigate,
+            notices,
+            setSelectedNoticeId,
+            handleCloseDialog,
+          })
+        ) : (
+          RoleRenderer.authorityView({
+            theme,
+            searchQuery,
+            setSearchQuery,
+            hallIdSearch,
+            setHallIdSearch,
+            filteredDocuments,
+            handleViewPdf,
+            handleApprove,
+            handleReject,
+            openPdf,
+            pdfUrl,
+            setOpenPdf,
+            navigate,
+          })
+        )}
 
         {/* Re-use Upload Dialog for students (component-level) */}
         {/* (Student dialog is rendered from RoleRenderer) */}

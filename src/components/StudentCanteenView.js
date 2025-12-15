@@ -48,7 +48,7 @@ import {
   RateReview as RateReviewIcon
 } from '@mui/icons-material';
 
-const StudentCanteenView = ({ user }) => {
+/*const StudentCanteenView = ({ user }) => {
   const [menu, setMenu] = useState([]);
   const [reviews, setReviews] = useState({});
   const [loading, setLoading] = useState(true);
@@ -61,6 +61,8 @@ const StudentCanteenView = ({ user }) => {
     rating: 5,
     comment: ''
   });
+
+  const theme = useTheme();
 
 //const [reviews, setReviews] = useState({}); // Already initialized as empty object
 
@@ -200,11 +202,244 @@ const handleDeleteReview = async (reviewId, itemId) => {
   } catch (err) {
     console.error('Failed to delete review:', err);
   }
+};*/
+/* -----------------------------------------------------
+   🧱 Facade Pattern — Canteen API Facade
+   ------------------------------------------------------
+   Provides a unified interface for all canteen-related
+   API calls so UI components remain clean and focused.
+------------------------------------------------------ */
+const CanteenAPI = {
+  async fetchMenu() {
+    const res = await fetch("http://localhost:5000/api/authority/canteen-menu");
+    if (!res.ok) throw new Error("Failed to fetch menu");
+    return res.json();
+  },
+
+  async fetchReviews(itemId) {
+    const res = await fetch(
+      `http://localhost:5000/api/admin/students/canteen-menu/${itemId}/reviews`
+    );
+    if (!res.ok) throw new Error("Failed to fetch reviews");
+    return res.json();
+  },
+
+  async addReview(itemId, payload) {
+    const res = await fetch(
+      `http://localhost:5000/api/admin/students/canteen-menu/${itemId}/reviews`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }
+    );
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to add review");
+    }
+    return res.json();
+  },
+
+  async deleteReview(reviewId, all_student_id) {
+    const res = await fetch(
+      `http://localhost:5000/api/canteen-menu/reviews/${reviewId}`,
+      {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ all_student_id }),
+      }
+    );
+
+    if (!res.ok) throw new Error("Failed to delete review");
+    return res.json();
+  },
 };
+
+/* -----------------------------------------------------
+   🏭 Factory Pattern — User Context Resolver
+   ------------------------------------------------------
+   Ensures user identity is consistently resolved from
+   props or localStorage without duplication.
+------------------------------------------------------ */
+const UserFactory = {
+  resolve(user) {
+    const stored = JSON.parse(localStorage.getItem("user") || "{}");
+    return {
+      all_student_id:
+        user?.all_student_id ||
+        user?.user?.all_student_id ||
+        stored.all_student_id,
+      name: user?.name || user?.user?.name || stored.name,
+      roll_no: user?.roll_no || user?.user?.roll_no || stored.roll_no,
+      user_id: user?.user_id || user?.user?.user_id || stored.user_id,
+    };
+  },
+};
+
+/* -----------------------------------------------------
+   🔁 Observer Pattern — React State Updates
+   ------------------------------------------------------
+   React's state system automatically propagates changes
+   to UI when menu or reviews update.
+------------------------------------------------------ */
+const StudentCanteenView = ({ user }) => {
+  const [menu, setMenu] = useState([]);
+  const [reviews, setReviews] = useState({});
+  const [loading, setLoading] = useState(true);
+  /* -----------------------------------------------------
+   🎯 UI Filter State — (kept for existing JSX)
+------------------------------------------------------ */
+const [selectedMealType, setSelectedMealType] = useState("");
+const [selectedFoodType, setSelectedFoodType] = useState("");
+
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [openReviewDialog, setOpenReviewDialog] = useState(false);
+
+  const [newReview, setNewReview] = useState({ rating: 5, comment: "" });
+
+  const theme = useTheme();
+
+  useEffect(() => {
+    loadMenu();
+  }, []);
+
+  /* -----------------------------------------------------
+     🧠 Command Pattern — Menu Loading Action
+  ------------------------------------------------------ */
+  const loadMenu = async () => {
+    try {
+      const data = await CanteenAPI.fetchMenu();
+      setMenu(data);
+
+      const reviewMap = {};
+      for (const item of data) {
+        reviewMap[item.item_id] = [];
+        loadReviews(item.item_id);
+      }
+      setReviews(reviewMap);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadReviews = async (itemId) => {
+    try {
+      const data = await CanteenAPI.fetchReviews(itemId);
+      setReviews((prev) => ({ ...prev, [itemId]: data || [] }));
+    } catch {
+      setReviews((prev) => ({ ...prev, [itemId]: [] }));
+    }
+  };
+
+  /* -----------------------------------------------------
+     🧠 Command Pattern — Add Review Action
+  ------------------------------------------------------ */
+  const handleAddReview = async () => {
+    if (!selectedItem) return;
+
+    const userCtx = UserFactory.resolve(user);
+
+    try {
+      const review = await CanteenAPI.addReview(selectedItem.item_id, {
+        ...userCtx,
+        rating: newReview.rating,
+        comment: newReview.comment,
+      });
+
+      setReviews((prev) => ({
+        ...prev,
+        [selectedItem.item_id]: [
+          review,
+          ...(prev[selectedItem.item_id] || []),
+        ],
+      }));
+
+      setOpenReviewDialog(false);
+      setNewReview({ rating: 5, comment: "" });
+      alert("✅ Review submitted successfully!");
+    } catch (err) {
+      alert(`❌ ${err.message}`);
+    }
+  };
+
+  /* -----------------------------------------------------
+     🧠 Command Pattern — Delete Review Action
+  ------------------------------------------------------ */
+  const handleDeleteReview = async (reviewId, itemId) => {
+    const userCtx = UserFactory.resolve(user);
+
+    try {
+      await CanteenAPI.deleteReview(reviewId, userCtx.all_student_id);
+      setReviews((prev) => ({
+        ...prev,
+        [itemId]: prev[itemId].filter((r) => r.review_id !== reviewId),
+      }));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  
 
   return (
   <Container maxWidth="lg" sx={{ py: 4 }}>
-    <Typography variant="h4" gutterBottom>Canteen Menu</Typography>
+    {/* Header */}
+    <Box
+      sx={{
+        bgcolor: 'white',
+        color: theme.palette.primary.main,
+        p: 4,
+        borderRadius: 2,
+        mb: 4,
+        position: 'relative',
+        boxShadow: 3,
+      }}
+    >
+      <Typography variant="h4" gutterBottom>
+        Canteen
+      </Typography>
+      <Typography variant="h6" sx={{ color: theme.palette.text.secondary, mt: 0.5 }}>
+        Check today's canteen menu and reviews.
+      </Typography>
+    </Box>
+      {/* ======= Dark Blue Half + Circles ======= */}
+            <Box
+              sx={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: "100%",
+                height: "50%",
+                //bgcolor: "#0B3D91",
+                zIndex: 0,
+              }}
+            >
+              <Box
+                sx={{
+                  position: "absolute",
+                  width: 200,
+                  height: 200,
+                  borderRadius: "50%",
+                  bgcolor: "rgba(255,255,255,0.1)",
+                  top: "20%",
+                  left: "30%",
+                }}
+              />
+              <Box
+                sx={{
+                  position: "absolute",
+                  width: 250,
+                  height: 250,
+                  borderRadius: "50%",
+                  bgcolor: "rgba(255,255,255,0.15)",
+                  top: "25%",
+                  left: "40%",
+                }}
+              />
+            </Box>
     <Box sx={{ display: "flex", gap: 2, mb: 3 }}>
   
   {/* Meal Type Filter */}
@@ -290,6 +525,7 @@ const handleDeleteReview = async (reviewId, itemId) => {
                       </Box>
                       <Typography variant="body2" sx={{ mt: 1 }}>{review.comment}</Typography>
                       {user.all_student_id === review.all_student_id && (
+         
                         <Button 
                           size="small" 
                           color="error" 

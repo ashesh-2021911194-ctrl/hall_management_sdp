@@ -15,6 +15,7 @@ import {
   Divider,
   Badge,
 } from "@mui/material";
+import { useTheme } from '@mui/material/styles';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import DoneIcon from '@mui/icons-material/Done';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
@@ -176,6 +177,7 @@ const WithdrawCommand = {
    ========================================================= */
 export default function StudentSeat({ user }) {
   const studentId = extractStudentId(user);
+  const theme = useTheme();
   const { seat, setSeat, loading } = useSeatData(studentId);
   const [files, setFiles] = useState({ resultCard: null, hallCard: null });
   const [notifications, setNotifications] = useState([]);
@@ -289,7 +291,7 @@ export default function StudentSeat({ user }) {
         minHeight: "100vh",
         width: "100%",
         overflow: "hidden",
-        bgcolor: "white",
+        //bgcolor: "white",
       }}
     >
       {/* ======= Dark Blue Half + Circles ======= */}
@@ -300,7 +302,7 @@ export default function StudentSeat({ user }) {
           left: 0,
           width: "100%",
           height: "50%",
-          bgcolor: "#0B3D91",
+          //bgcolor: "#0B3D91",
           zIndex: 0,
         }}
       >
@@ -337,187 +339,211 @@ export default function StudentSeat({ user }) {
           flexDirection: "column",
           alignItems: "center",
           gap: 4,
-          pt: 12,
+          pt: 8,
           px: 2,
         }}
       >
-        {/* ======= Seat Details ======= */}
-        {/* ======= Notifications ======= */}
-        <Paper sx={{ width: "100%", maxWidth: 500, p: 0, borderRadius: 3, boxShadow: 3, bgcolor: "white", overflow: 'hidden' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: 2 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Typography variant="h6" sx={{ fontWeight: 600 }}>Notifications</Typography>
-              <Badge color="error" badgeContent={notifications.filter(n => !n.read).length}>
-                <NotificationsIcon />
-              </Badge>
-            </Box>
-            <IconButton
-              aria-label={notifOpen ? 'collapse notifications' : 'expand notifications'}
-              onClick={() => setNotifOpen(open => !open)}
-              size="small"
-              sx={{ transform: notifOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 200ms' }}
-            >
-              <ExpandMoreIcon />
-            </IconButton>
-          </Box>
-
-          <Collapse in={notifOpen} timeout="auto" unmountOnExit>
-            <Box sx={{ p: 2 }}>
-              {notifLoading ? (
-                <Typography>Loading notifications...</Typography>
-              ) : notifications.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">No notifications</Typography>
-              ) : (
-                <List dense>
-                  {notifications.map((n) => (
-                    <React.Fragment key={n.id}>
-                      <ListItem alignItems="flex-start" sx={{ py: 0.5 }}>
-                        <ListItemText
-                          primary={n.message}
-                          secondary={new Date(n.date).toLocaleString()}
-                          sx={{ opacity: n.read ? 0.6 : 1 }}
-                        />
-                        <ListItemSecondaryAction>
-                          {!n.read && (
-                            <IconButton edge="end" size="small" onClick={() => markNotificationRead(n.id)}>
-                              <DoneIcon fontSize="small" />
-                            </IconButton>
-                          )}
-                          {n.link && (
-                            <IconButton edge="end" size="small" onClick={() => window.open(n.link, '_blank')}>
-                              <OpenInNewIcon fontSize="small" />
-                            </IconButton>
-                          )}
-                        </ListItemSecondaryAction>
-                      </ListItem>
-                      <Divider component="li" />
-                    </React.Fragment>
-                  ))}
-                </List>
-              )}
-            </Box>
-          </Collapse>
-        </Paper>
-
-        <Card
+        {/* Header */}
+        <Box
           sx={{
-            width: "100%",
-            maxWidth: 500,
-            p: 3,
-            borderRadius: 3,
+            bgcolor: 'white',
+            color: theme.palette.primary.main,
+            p: 4,
+            borderRadius: 2,
+            mb: 4,
+            position: 'relative',
             boxShadow: 3,
-            bgcolor: "white",
+            width: '100%',
+            maxWidth: 900,
           }}
         >
-          <CardContent>
-            <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
-              Seat Details
-            </Typography>
-            {seat?.hasSeat ? (
-              <Grid container spacing={2}>
-                <Grid item xs={6}>
-                  <Typography>
-                    <b>Building:</b> {seat.seat.building_name}
-                  </Typography>
-                </Grid>
-                <Grid item xs={6}>
-                  <Typography>
-                    <b>Floor:</b> {seat.seat.floor_number}
-                  </Typography>
-                </Grid>
-                <Grid item xs={6}>
-                  <Typography>
-                    <b>Room:</b> {seat.seat.room_number}
-                  </Typography>
-                </Grid>
-                <Grid item xs={6}>
-                  <Typography>
-                    <b>Expiry:</b>{" "}
-                    {new Date(seat.seat.expiry_date).toLocaleDateString()}
-                  </Typography>
-                </Grid>
-                <Grid item xs={12}>
-                    <Button
-                    variant="contained"
-                    color="error"
-                    fullWidth
-                    sx={{ mt: 1 }}
-                    onClick={() => WithdrawCommand.execute(studentId, setSeat)}
-                  >
-                    Withdraw Seat
-                  </Button>
-                </Grid>
-              </Grid>
-            ) : (
-              <Typography>No seat allocated yet.</Typography>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* ======= Apply Form ======= */}
-        <Paper
-          sx={{
-            p: 3,
-            width: "100%",
-            maxWidth: 500,
-            borderRadius: 3,
-            boxShadow: 3,
-            bgcolor: "white",
-          }}
-        >
-          <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
-            Apply for a Seat
+          <Typography variant="h4" gutterBottom>
+            Student Seat
           </Typography>
-          <Box
-            component="form"
-            onSubmit={(e) => {
-              e.preventDefault();
-              ApplyCommand(studentId, files, setSeat);
-            }}
-            sx={{ display: "flex", flexDirection: "column", gap: 2 }}
-          >
-            <Box>
-              <Typography variant="body1" sx={{ mb: 1 }}>
-                Upload Result Card
-              </Typography>
-              <input
-                type="file"
-                accept="application/pdf"
-                onChange={(e) =>
-                  setFiles((prev) => ({
-                    ...prev,
-                    resultCard: e.target.files[0],
-                  }))
-                }
-                required
-              />
-            </Box>
-            <Box>
-              <Typography variant="body1" sx={{ mb: 1 }}>
-                Upload Hall Card
-              </Typography>
-              <input
-                type="file"
-                accept="application/pdf"
-                onChange={(e) =>
-                  setFiles((prev) => ({
-                    ...prev,
-                    hallCard: e.target.files[0],
-                  }))
-                }
-                required
-              />
-            </Box>
-            <Button
-              variant="contained"
-              color="primary"
-              type="submit"
-              fullWidth
+          <Typography variant="h6" sx={{ color: theme.palette.text.secondary, mt: 0.5 }}>
+        View your room allocation and details
+      </Typography>
+        </Box>
+        {/* ======= Main Row: Left = Seat + Apply, Right = Notifications ======= */}
+        <Box sx={{ width: '100%', maxWidth: 900, display: 'flex', gap: 2, alignItems: 'flex-start', flexDirection: { xs: 'column', md: 'row' } }}>
+          {/* Left Column: Seat Details and Apply Form */}
+          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Card
+              sx={{
+                width: '100%',
+                p: 3,
+                borderRadius: 3,
+                boxShadow: 3,
+              }}
             >
-              Apply for Seat
-            </Button>
+              <CardContent>
+                <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+                  Seat Details
+                </Typography>
+                {seat?.hasSeat ? (
+                  <Grid container spacing={2}>
+                    <Grid item xs={6}>
+                      <Typography>
+                        <b>Building:</b> {seat.seat.building_name}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={6}>
+                      <Typography>
+                        <b>Floor:</b> {seat.seat.floor_number}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={6}>
+                      <Typography>
+                        <b>Room:</b> {seat.seat.room_number}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={6}>
+                      <Typography>
+                        <b>Expiry:</b>{" "}
+                        {new Date(seat.seat.expiry_date).toLocaleDateString()}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={12}>
+                      <Button
+                        variant="contained"
+                        color="error"
+                        fullWidth
+                        sx={{ mt: 1 }}
+                        onClick={() => WithdrawCommand.execute(studentId, setSeat)}
+                      >
+                        Withdraw Seat
+                      </Button>
+                    </Grid>
+                  </Grid>
+                ) : (
+                  <Typography>No seat allocated yet.</Typography>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Apply Form (stacked under seat details) */}
+            <Paper
+              sx={{
+                p: 3,
+                width: '100%',
+                borderRadius: 3,
+                boxShadow: 3,
+              }}
+            >
+              <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+                Apply for a Seat
+              </Typography>
+              <Box
+                component="form"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  ApplyCommand(studentId, files, setSeat);
+                }}
+                sx={{ display: "flex", flexDirection: "column", gap: 2 }}
+              >
+                <Box>
+                  <Typography variant="body1" sx={{ mb: 1 }}>
+                    Upload Result Card
+                  </Typography>
+                  <input
+                    type="file"
+                    accept="application/pdf"
+                    onChange={(e) =>
+                      setFiles((prev) => ({
+                        ...prev,
+                        resultCard: e.target.files[0],
+                      }))
+                    }
+                    required
+                  />
+                </Box>
+                <Box>
+                  <Typography variant="body1" sx={{ mb: 1 }}>
+                    Upload Hall Card
+                  </Typography>
+                  <input
+                    type="file"
+                    accept="application/pdf"
+                    onChange={(e) =>
+                      setFiles((prev) => ({
+                        ...prev,
+                        hallCard: e.target.files[0],
+                      }))
+                    }
+                    required
+                  />
+                </Box>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  type="submit"
+                  fullWidth
+                >
+                  Apply for Seat
+                </Button>
+              </Box>
+            </Paper>
           </Box>
-        </Paper>
+
+          {/* Right Column: Notifications */}
+          <Box sx={{ width: { xs: '100%', md: 360 } }}>
+            <Paper sx={{ width: '100%', p: 0, borderRadius: 3, boxShadow: 3, overflow: 'hidden' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: 2 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Typography variant="h6" sx={{ fontWeight: 600 }}>Notifications</Typography>
+                  <Badge color="error" badgeContent={notifications.filter(n => !n.read).length}>
+                    <NotificationsIcon />
+                  </Badge>
+                </Box>
+                <IconButton
+                  aria-label={notifOpen ? 'collapse notifications' : 'expand notifications'}
+                  onClick={() => setNotifOpen(open => !open)}
+                  size="small"
+                  sx={{ transform: notifOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 200ms' }}
+                >
+                  <ExpandMoreIcon />
+                </IconButton>
+              </Box>
+
+              <Collapse in={notifOpen} timeout="auto" unmountOnExit>
+                <Box sx={{ p: 2 }}>
+                  {notifLoading ? (
+                    <Typography>Loading notifications...</Typography>
+                  ) : notifications.length === 0 ? (
+                    <Typography variant="body2" color="text.secondary">No notifications</Typography>
+                  ) : (
+                    <List dense>
+                      {notifications.map((n) => (
+                        <React.Fragment key={n.id}>
+                          <ListItem alignItems="flex-start" sx={{ py: 0.5 }}>
+                            <ListItemText
+                              primary={n.message}
+                              secondary={new Date(n.date).toLocaleString()}
+                              sx={{ opacity: n.read ? 0.6 : 1 }}
+                            />
+                            <ListItemSecondaryAction>
+                              {!n.read && (
+                                <IconButton edge="end" size="small" onClick={() => markNotificationRead(n.id)}>
+                                  <DoneIcon fontSize="small" />
+                                </IconButton>
+                              )}
+                              {n.link && (
+                                <IconButton edge="end" size="small" onClick={() => window.open(n.link, '_blank')}>
+                                  <OpenInNewIcon fontSize="small" />
+                                </IconButton>
+                              )}
+                            </ListItemSecondaryAction>
+                          </ListItem>
+                          <Divider component="li" />
+                        </React.Fragment>
+                      ))}
+                    </List>
+                  )}
+                </Box>
+              </Collapse>
+            </Paper>
+          </Box>
+        </Box>
       </Box>
     </Box>
   );

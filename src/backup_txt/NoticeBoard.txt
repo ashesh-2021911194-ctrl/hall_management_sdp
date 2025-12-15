@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { Accordion, AccordionSummary, AccordionDetails } from '@mui/material';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import {
   Box,
   Container,
@@ -58,43 +60,82 @@ const NoticeBoard = ({ user }) => {
     documentTitle: '',
     documentDescription: ''
   });
-
   const [selectedFile, setSelectedFile] = useState(null);
+
+  useEffect(() => {
+    fetchNotices();
+  }, [userRole]);
+
+  const fetchNotices = async () => {
+  try {
+    const res = await fetch(
+      userRole === "authority"
+        ? "http://localhost:5000/api/authority/notices"
+        : "http://localhost:5000/api/admin/students/notices"
+    );
+    const data = await res.json();
+    setNotices(data);
+  } catch (err) {
+    setError("Failed to fetch notices");
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   const handleAddNotice = async () => {
     if (!newNotice.title || !newNotice.content) {
-      alert('Title and content are required!');
+      alert("Title and content are required!");
       return;
     }
 
     const formData = new FormData();
-    formData.append('title', newNotice.title);
-    formData.append('content', newNotice.content);
-    formData.append('importance', newNotice.importance);
-    formData.append('requires_document', newNotice.requiresDocument);
-    formData.append('documentTitle', newNotice.documentTitle);
-    formData.append('documentDescription', newNotice.documentDescription);
-    if (selectedFile) formData.append('document', selectedFile);
+    formData.append("title", newNotice.title);
+    formData.append("content", newNotice.content);
+    formData.append("importance", newNotice.importance);
+    formData.append("requires_document", newNotice.requiresDocument);
+    formData.append("documentTitle", newNotice.documentTitle);
+    formData.append("documentDescription", newNotice.documentDescription);
+
+    if (selectedFile) {
+      formData.append("document", selectedFile);
+    }
 
     try {
-      const res = await fetch('http://localhost:5000/api/authority/notices', {
-        method: 'POST',
-        body: formData
+      console.log("Submitting notice:", {
+        title: newNotice.title,
+        content: newNotice.content,
+        importance: newNotice.importance,
+        requiresDocument: newNotice.requiresDocument
       });
+
+      const res = await fetch("http://localhost:5000/api/authority/notices", {
+        method: "POST",
+        body: formData,
+      });
+
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'Failed to add notice');
+        const errorData = await res.json();
+        throw new Error(errorData.error || "Failed to add notice");
       }
+
       const data = await res.json();
-      setNotices(prev => [data, ...prev]);
-      alert('Notice added successfully!');
+      
+      // Add the new notice to the state
+      setNotices(prevNotices => [data, ...prevNotices]);
+      
+      alert("Notice added successfully!");
       handleCloseDialog();
+      
+      // Refresh notices list
       fetchNotices();
     } catch (err) {
-      console.error('Error adding notice:', err);
-      alert(err.message || 'Failed to add notice');
+      console.error("Error adding notice:", err);
+      alert(err.message || "Failed to add notice");
     }
   };
+
+
 
   const handleCloseDialog = () => {
     setOpenDialog(false);
@@ -117,27 +158,6 @@ const NoticeBoard = ({ user }) => {
   const [pdfUrl, setPdfUrl] = useState(null);
   const [selectedNotice, setSelectedNotice] = useState(null);
   const [openViewDialog, setOpenViewDialog] = useState(false);
-
-  const fetchNotices = async () => {
-    try {
-      const res = await fetch(
-        userRole === 'authority'
-          ? 'http://localhost:5000/api/authority/notices'
-          : 'http://localhost:5000/api/admin/students/notices'
-      );
-      const data = await res.json();
-      setNotices(data || []);
-    } catch (err) {
-      setError('Failed to fetch notices');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchNotices();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userRole]);
 
   const handleViewDetails = (notice) => {
     setSelectedNotice(notice);
@@ -254,7 +274,7 @@ const NoticeBoard = ({ user }) => {
       minHeight: '100vh',
       position: 'relative',
       bgcolor: 'transparent', // remove solid color
-      //background: 'linear-gradient(to bottom, #0B3D91 50%, #ffffff 50%)',
+      background: 'linear-gradient(to bottom, #0B3D91 50%, #ffffff 50%)',
       overflow: 'hidden',
     }}
   >
@@ -285,7 +305,7 @@ const NoticeBoard = ({ user }) => {
             <Typography variant="body1" paragraph>
               {selectedNotice.content}
             </Typography>
-            {((!selectedNotice.student_documents || selectedNotice.student_documents.length === 0) && (selectedNotice.document_url || selectedNotice.student_document_url)) && (
+            {(selectedNotice.document_url || selectedNotice.student_document_url) && (
               <Box sx={{ mt: 2 }}>
                 <Typography variant="subtitle2" gutterBottom>
                   Attached Document:
@@ -302,34 +322,6 @@ const NoticeBoard = ({ user }) => {
                     {selectedNotice.document_description || selectedNotice.documentDescription}
                   </Typography>
                 )}
-              </Box>
-            )}
-
-            {selectedNotice.student_documents && selectedNotice.student_documents.length > 0 && (
-              <Box sx={{ mt: 3 }}>
-                <Typography variant="subtitle2" gutterBottom>
-                  Student Uploaded Documents
-                </Typography>
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                  {selectedNotice.student_documents.map((d) => {
-                    const filename = d.file_path ? d.file_path.split('/').pop() : 'document';
-                    const normalized = d.file_path && d.file_path.startsWith('/') ? `http://localhost:5000${d.file_path}` : d.file_path;
-                    return (
-                      <Paper key={d.id} sx={{ p: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <Box>
-                          <Typography variant="body2">{filename}</Typography>
-                          {d.uploaded_at && (
-                            <Typography variant="caption" color="text.secondary">{new Date(d.uploaded_at).toLocaleString()}</Typography>
-                          )}
-                        </Box>
-                        <Box>
-                          <Button size="small" variant="outlined" onClick={() => handleViewPdf(normalized)} startIcon={<AttachFileIcon />}>View</Button>
-                          <Button size="small" sx={{ ml: 1 }} variant="text" href={normalized} target="_blank" rel="noopener noreferrer">Download</Button>
-                        </Box>
-                      </Paper>
-                    );
-                  })}
-                </Box>
               </Box>
             )}
             {selectedNotice.requiresDocument && (
@@ -394,41 +386,32 @@ const NoticeBoard = ({ user }) => {
       </DialogContent>
     </Dialog>
     {/* Background Circles */}
-    {/* ======= Dark Blue Half + Circles ======= */}
-          <Box
-            sx={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              width: "100%",
-              height: "50%",
-              //bgcolor: "#0B3D91",
-              zIndex: 0,
-            }}
-          >
-            <Box
-              sx={{
-                position: "absolute",
-                width: 200,
-                height: 200,
-                borderRadius: "50%",
-                bgcolor: "rgba(255,255,255,0.1)",
-                top: "20%",
-                left: "30%",
-              }}
-            />
-            <Box
-              sx={{
-                position: "absolute",
-                width: 250,
-                height: 250,
-                borderRadius: "50%",
-                bgcolor: "rgba(255,255,255,0.15)",
-                top: "25%",
-                left: "40%",
-              }}
-            />
-          </Box>
+    <Box
+      sx={{
+        position: 'absolute',
+        top: '-150px',
+        left: '-150px',
+        width: 300,
+        height: 300,
+        bgcolor: theme.palette.primary.main,
+        borderRadius: '50%',
+        opacity: 0.3,
+        zIndex: 0,
+      }}
+    />
+    <Box
+      sx={{
+        position: 'absolute',
+        top: '50px',
+        right: '-100px',
+        width: 250,
+        height: 250,
+        bgcolor: theme.palette.primary.main,
+        borderRadius: '50%',
+        opacity: 0.25,
+        zIndex: 0,
+      }}
+    />
 
     <Container maxWidth="lg" sx={{ py: 4, position: 'relative', zIndex: 1 }}>
       {/* Add Notice Dialog */}
@@ -590,57 +573,128 @@ const NoticeBoard = ({ user }) => {
       </Paper>
 
       {/* Notices Grid */}
-      <Grid container spacing={3} justifyContent="center">
+      <Grid container spacing={3}>
   {filteredNotices.map((notice) => (
-    <Grid item xs={12} sm={6} md={4} lg={4} key={notice.id}>
+    <Grid item xs={12} md={6} lg={4} key={notice.id}>
       {userRole === 'student' ? (
-        <Paper
-          onClick={() => handleViewDetails(notice)}
-          elevation={1}
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 2,
-            p: 2,
-            bgcolor: 'white',
-            cursor: 'pointer',
-            '&:hover': { boxShadow: 3 },
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 200 }}>
-            <Chip
-              icon={getImportanceIcon(notice.importance)}
-              label={notice.importance.toUpperCase()}
-              color={getImportanceColor(notice.importance)}
-              size="small"
-            />
-            <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>{notice.title}</Typography>
-          </Box>
+        <Accordion
+  sx={{
+    bgcolor: 'white',
+    boxShadow: 2,
+    height: 280, // fixed height
+    width: '100%', // consistent width
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'flex-start',
+  }}
+>
 
-          <Box sx={{ flex: 1 }} />
+                <AccordionSummary
+  expandIcon={<ExpandMoreIcon />}
+  aria-controls={`notice-content-${notice.id}`}
+  id={`notice-header-${notice.id}`}
+  sx={{
+    minHeight: 'unset', // removes unnecessary default padding
+    '& .MuiAccordionSummary-content': {
+      margin: 0,
+      alignItems: 'center',
+    },
+  }}
+>
 
-          <Typography variant="caption" sx={{ color: 'gray', minWidth: 110, textAlign: 'right' }}>
-            {new Date(notice.date).toLocaleDateString()}
-          </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <Chip
+                      icon={getImportanceIcon(notice.importance)}
+                      label={notice.importance.toUpperCase()}
+                      color={getImportanceColor(notice.importance)}
+                      size="small"
+                      sx={{ mr: 1 }}
+                    />
+                    <Typography variant="subtitle1">
+                      {notice.title}
+                    </Typography>
+                    <Typography
+                      variant="caption"
+                      sx={{ ml: 2, color: 'gray' }}
+                    >
+                      {new Date(notice.date).toLocaleDateString()}
+                    </Typography>
+                  </Box>
+                </AccordionSummary>
+                <AccordionDetails>
+                  <Typography variant="body1" paragraph>
+                    {notice.content}
+                  </Typography>
 
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, ml: 2 }} onClick={(e) => e.stopPropagation()}>
-            {(notice.document_url || notice.student_document_url) && (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Typography variant="body2" color="text.secondary">Attached Document:</Typography>
-                <Button size="small" variant="outlined" onClick={() => handleViewPdf(notice.document_url || notice.student_document_url)} startIcon={<AttachFileIcon />}>View</Button>
-              </Box>
-            )}
-            {notice.requiresDocument && (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Typography variant="body2" color="text.secondary">Required Document Upload:</Typography>
-                <Button size="small" variant="outlined" component="label" startIcon={<AttachFileIcon />}>
-                  Upload
-                  <input type="file" hidden onChange={(e) => handleUpload(notice.id, e.target.files[0])} />
-                </Button>
-              </Box>
-            )}
-          </Box>
-        </Paper>
+                  {(notice.document_url || notice.student_document_url) && (
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="subtitle2">
+                        Attached PDF:
+                      </Typography>
+                      <Button
+                        variant="outlined"
+                        onClick={() =>
+                          handleViewPdf(
+                            notice.document_url || notice.student_document_url
+                          )
+                        }
+                        startIcon={<AttachFileIcon />}
+                      >
+                        {notice.document_title ||
+                          notice.documentTitle ||
+                          'View PDF'}
+                      </Button>
+                      {(notice.document_description ||
+                        notice.documentDescription) && (
+                        <Typography
+                          variant="body2"
+                          color="text.secondary"
+                        >
+                          {notice.document_description ||
+                            notice.documentDescription}
+                        </Typography>
+                      )}
+                    </Box>
+                  )}
+
+                  {notice.requiresDocument && (
+                    <Box sx={{ mt: 2 }}>
+                      <Typography
+                        variant="subtitle2"
+                        color="primary"
+                      >
+                        Required Document:
+                      </Typography>
+                      <Typography variant="body2">
+                        {notice.document_title}
+                      </Typography>
+                      {notice.document_description && (
+                        <Typography
+                          variant="body2"
+                          color="text.secondary"
+                        >
+                          {notice.document_description}
+                        </Typography>
+                      )}
+                      <Button
+                        variant="outlined"
+                        component="label"
+                        startIcon={<AttachFileIcon />}
+                        sx={{ mt: 1 }}
+                      >
+                        Upload Document
+                        <input
+                          type="file"
+                          hidden
+                          onChange={(e) =>
+                            handleUpload(notice.id, e.target.files[0])
+                          }
+                        />
+                      </Button>
+                    </Box>
+                  )}
+                </AccordionDetails>
+              </Accordion>
             ) : (
               <Card
   sx={{
@@ -677,14 +731,7 @@ const NoticeBoard = ({ user }) => {
                     </Box>
                     <IconButton
                       size="small"
-                      onClick={() => {
-                        // If authority added a document on the notice, preview it inline.
-                        if (notice.document_url) {
-                          handleViewPdf(notice.document_url);
-                        } else {
-                          handleViewDetails(notice);
-                        }
-                      }}
+                      onClick={() => handleViewDetails(notice)}
                       color="primary"
                     >
                       <VisibilityIcon />
@@ -703,7 +750,7 @@ const NoticeBoard = ({ user }) => {
                     {notice.content}
                   </Typography>
 
-                  {(notice.requiresDocument || notice.document_url || notice.student_documents?.length > 0) && (
+                  {(notice.requiresDocument || notice.document_url || notice.student_document_url) && (
                     <Box sx={{ mt: 'auto' }}>
                       <Divider sx={{ my: 2 }} />
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -724,27 +771,16 @@ const NoticeBoard = ({ user }) => {
                             />
                           </Button>
                         )}
-
-                        {/* Prefer showing student-uploaded docs to authority */}
-                        {notice.student_documents && notice.student_documents.length > 0 ? (
+                        {(notice.document_url || notice.student_document_url) && (
                           <Button
                             variant="outlined"
                             size="small"
-                            onClick={() => handleViewDetails(notice)}
-                            startIcon={<AttachFileIcon />}
-                          >
-                            View Student Docs
-                          </Button>
-                        ) : (notice.document_url && (
-                          <Button
-                            variant="outlined"
-                            size="small"
-                            onClick={() => handleViewPdf(notice.document_url)}
+                            onClick={() => handleViewPdf(notice.document_url || notice.student_document_url)}
                             startIcon={<AttachFileIcon />}
                           >
                             View
                           </Button>
-                        ))}
+                        )}
                       </Box>
                     </Box>
                   )}

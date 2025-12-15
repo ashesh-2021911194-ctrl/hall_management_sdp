@@ -55,7 +55,7 @@ router.post("/applications/:applicationId/approve", async (req, res) => {
     const appRes = await client.query(
       `
       SELECT a.application_id, a.student_id AS all_student_id,
-             s.name, s.roll_no, s.cgpa, s.year, s.merit_rank
+             s.name, s.roll_no, s.cgpa, s.year, s.merit_rank,s.present_address
       FROM seat_applications a
       JOIN all_students s ON a.student_id = s.all_student_id
       WHERE a.application_id = $1 AND a.status = 'Pending'
@@ -67,22 +67,7 @@ router.post("/applications/:applicationId/approve", async (req, res) => {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Application not found or already processed" });
     }
-
-    /*const student = appRes.rows[0];
-    let score;
-
-if (student.year === 1) {
-  // For 1st year: merit rank + year (normalize merit so lower rank = higher score)
-  const meritScore = (1 / student.merit_rank) * 100; // normalize merit
-  score = (student.year * 25) + (meritScore * 25);
-} else {
-  // For 2nd, 3rd, 4th years: CGPA + year
-  const cgpaScore = (student.cgpa / 4.0) * 50; // normalize CGPA (max 50 points)
-  const yearScore = (student.year / 4.0) * 50; // normalize year (max 50 points)
-  score = cgpaScore + yearScore;
-}
-    score = Math.round(score * 100) / 100; // round to 2 decimal places
-*/   
+  
     const student = appRes.rows[0];
 
 // Convert all numeric fields properly
@@ -90,7 +75,22 @@ const year = parseInt(student.year);
 const cgpa = parseFloat(student.cgpa);
 const meritRank = parseFloat(student.merit_rank);
 
-let score = 0;
+function getAddressWeight(address) {
+  if (!address) return 0;
+
+  const a = address.toLowerCase();
+
+  if (a.includes("dhaka")) return 0; // lowest
+  if (
+    a.includes("gazipur") ||
+    a.includes("narayanganj") ||
+    a.includes("munshiganj")
+  ) return 0.5; // mid
+
+  return 1; // highest
+}
+
+/*let score = 0;
 
 if (year === 1 && meritRank > 0) {
   // 1st year → based on merit
@@ -104,25 +104,36 @@ if (year === 1 && meritRank > 0) {
 }
 
 score = Math.round(score * 100) / 100; // round to 2 decimal places
+*/
+let score = 0;
 
-    // 2️⃣ Ensure student exists in "students" table
-    /*let studentId;
-    const studentRes = await client.query(
-      `SELECT student_id FROM students WHERE roll_no = $1`,
-      [student.roll_no]
-    );
+const maxWeight = 33.33;   // each factor gets equal weight
+const maxMeritRank = 2000; // adjust if needed
 
-    if (studentRes.rows.length > 0) {
-      studentId = studentRes.rows[0].student_id;
-    } else {
-      const insertRes = await client.query(
-        `INSERT INTO students (name, roll_no, cgpa, year, merit_rank, score)
-         VALUES ($1, $2, $3, $4, $5, $6)
-         RETURNING student_id`,
-        [student.name, student.roll_no, student.cgpa, student.year, student.merit_rank, score]
-      );
-      studentId = insertRes.rows[0].student_id;
-    }*/
+// --- Year Score (normalized 0 to 1) ---
+const yearScore = (year / 4) * maxWeight;
+
+// --- Merit OR CGPA Score ---
+let academicScore = 0;
+if (year === 1 && meritRank > 0) {
+  // Merit: lower rank → higher score
+  const normMerit = (maxMeritRank - meritRank + 1) / maxMeritRank; // 0–1
+  academicScore = normMerit * maxWeight;
+} else {
+  // CGPA: 0–4
+  const normCgpa = cgpa / 4.0; // 0–1
+  academicScore = normCgpa * maxWeight;
+}
+
+// --- Address Score ---
+const addressWeight = getAddressWeight(student.present_address);
+const addressScore = addressWeight * maxWeight;
+
+// --- Final Score ---
+score = yearScore + academicScore + addressScore;
+
+score = Math.round(score * 100) / 100;
+
     let studentId;
 const studentRes = await client.query(
   `SELECT student_id FROM students WHERE roll_no = $1`,
@@ -339,11 +350,80 @@ router.post("/notices", upload.single("document"), async (req, res) => {
 // GET /api/authority/notices
 router.get("/notices", async (req, res) => {
   try {
-    const result = await pool.query(`SELECT * FROM notices ORDER BY created_at DESC`);
+    const result = await pool.query(`
+      SELECT
+        n.notice_id AS id,
+        n.title,
+        n.content,
+        n.importance,
+        n.requires_document AS "requiresDocument",
+        n.document_title,
+        n.document_description,
+        n.document_url,
+        n.created_at AS date,
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'id', d.id,
+              'file_path', d.file_path,
+              'uploaded_at', d.uploaded_at
+            )
+          ) FILTER (WHERE d.id IS NOT NULL), '[]'
+        ) AS student_documents
+      FROM notices n
+      LEFT JOIN notice_documents d ON n.notice_id = d.notice_id
+      GROUP BY n.notice_id
+      ORDER BY n.created_at DESC
+    `);
+
+    // Return aggregated notices with student_documents array
     res.json(result.rows);
   } catch (err) {
     console.error("Error fetching notices:", err);
     res.status(500).json({ error: "Database error" });
+  }
+});
+
+
+// -------------------------
+// Staff endpoints
+// -------------------------
+// GET /api/authority/staff  - public read of staff list
+router.get('/staff', async (req, res) => {
+  try {
+    const result = await pool.query(`SELECT * FROM staff ORDER BY created_at DESC`);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching staff list:', err);
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
+// POST /api/authority/staff - only authority may add staff
+// Note: This simple protection expects the frontend to send the authority
+// username in the `X-Authority-Username` header. In a production system
+// use proper authentication (tokens/sessions) instead.
+router.post('/staff', async (req, res) => {
+  const authUsername = req.headers['x-authority-username'];
+  if (!authUsername) return res.status(403).json({ error: 'Only authority may add staff' });
+
+  try {
+    const authRes = await pool.query(`SELECT * FROM authority WHERE username = $1`, [authUsername]);
+    if (authRes.rows.length === 0) return res.status(403).json({ error: 'Authority not found' });
+
+    const { name, role, email, phone, department } = req.body;
+    if (!name || !role) return res.status(400).json({ error: 'Missing required fields: name and role' });
+
+    const insertRes = await pool.query(
+      `INSERT INTO staff (name, designation, email, phone, department, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+      [name, role, email || null, phone || null, department || null, authRes.rows[0].authority_id]
+    );
+
+    res.json(insertRes.rows[0]);
+  } catch (err) {
+    console.error('Error adding staff:', err);
+    res.status(500).json({ error: 'Database error' });
   }
 });
 
@@ -415,7 +495,7 @@ router.post("/students/:studentId/dismiss", async (req, res) => {
 
 
 // GET /api/authority/complaints — all complaints
-router.get("/complaints", async (req, res) => {
+/*router.get("/complaints", async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT c.*, s.name AS student_name, s.roll_no
@@ -470,12 +550,123 @@ router.put("/complaints/:id/status", async (req, res) => {
     console.error("Error updating status:", err);
     res.status(500).json({ error: "Database error" });
   }
+});*/
+/* -----------------------------------------------------
+   🧱 Repository Pattern — ComplaintRepository
+   -----------------------------------------------------
+   Handles all direct DB interactions related to
+   complaints. Controllers never talk to SQL directly.
+------------------------------------------------------ */
+const ComplaintRepository = {
+  async getAll(pool) {
+    return pool.query(`
+      SELECT c.*, s.name AS student_name, s.roll_no
+      FROM complaints c
+      JOIN students s ON c.student_id = s.student_id
+      ORDER BY c.created_at DESC
+    `);
+  },
+
+  async respond(pool, complaintId, response, status) {
+    return pool.query(
+      `UPDATE complaints
+       SET response = $1,
+           status = $2,
+           responded_at = CURRENT_TIMESTAMP
+       WHERE complaint_id = $3
+       RETURNING *`,
+      [response, status, complaintId]
+    );
+  },
+
+  async updateStatus(pool, complaintId, status) {
+    return pool.query(
+      `UPDATE complaints
+       SET status = $1
+       WHERE complaint_id = $2
+       RETURNING *`,
+      [status, complaintId]
+    );
+  },
+};
+
+/* -----------------------------------------------------
+   🧠 Service Layer Pattern — ComplaintService
+   -----------------------------------------------------
+   Encapsulates business rules (status defaults, etc.)
+------------------------------------------------------ */
+const ComplaintService = {
+  async fetchAll(pool) {
+    return ComplaintRepository.getAll(pool);
+  },
+
+  async respondToComplaint(pool, id, response, status) {
+    return ComplaintRepository.respond(
+      pool,
+      id,
+      response,
+      status || "Resolved"
+    );
+  },
+
+  async changeStatus(pool, id, status) {
+    return ComplaintRepository.updateStatus(pool, id, status);
+  },
+};
+
+/* -----------------------------------------------------
+   🎮 Controller Pattern — Authority Complaint Routes
+------------------------------------------------------ */
+
+// GET /api/authority/complaints — all complaints
+router.get("/complaints", async (req, res) => {
+  try {
+    const result = await ComplaintService.fetchAll(pool);
+    console.log("Authority complaints result:", result.rows);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Error fetching complaints:", err);
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+// PUT /api/authority/complaints/:id/respond — respond
+router.put("/complaints/:id/respond", async (req, res) => {
+  const { id } = req.params;
+  const { response, status } = req.body;
+
+  try {
+    const result = await ComplaintService.respondToComplaint(
+      pool,
+      id,
+      response,
+      status
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("Error responding to complaint:", err);
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+// PUT /api/authority/complaints/:id/status — update status
+router.put("/complaints/:id/status", async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+
+  try {
+    const result = await ComplaintService.changeStatus(pool, id, status);
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("Error updating status:", err);
+    res.status(500).json({ error: "Database error" });
+  }
 });
 
 
 
 // GET all canteen items with aggregated reviews
-router.get("/canteen-menu", async (req, res) => {
+/*router.get("/canteen-menu", async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT ci.*, 
@@ -588,6 +779,198 @@ router.patch("/canteen-menu/:itemId/availability", async (req, res) => {
        WHERE item_id = $2
        RETURNING *`,
       [available, itemId]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("Error updating availability:", err);
+    res.status(500).json({ error: "Failed to update availability" });
+  }
+});*/
+/* -----------------------------------------------------
+   🧱 Repository Pattern — CanteenRepository
+------------------------------------------------------ */
+const CanteenRepository = {
+  async getMenu(pool) {
+    return pool.query(`
+      SELECT ci.*, 
+             COALESCE(AVG(cr.rating), 0) AS average_rating,
+             COUNT(cr.review_id) AS review_count
+      FROM canteen_items ci
+      LEFT JOIN canteen_reviews cr ON ci.item_id = cr.item_id
+      GROUP BY ci.item_id
+      ORDER BY ci.created_at DESC
+    `);
+  },
+
+  async create(pool, data) {
+    return pool.query(
+      `INSERT INTO canteen_items
+       (name, description, price, category, preparation_time, meal_type, food_type, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       RETURNING *`,
+      data
+    );
+  },
+
+  async update(pool, data) {
+    return pool.query(
+      `UPDATE canteen_items
+       SET name = $1,
+           description = $2,
+           price = $3,
+           category = $4,
+           preparation_time = $5,
+           meal_type = $6,
+           food_type = $7,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE item_id = $8
+       RETURNING *`,
+      data
+    );
+  },
+
+  async remove(pool, itemId) {
+    return pool.query(
+      `DELETE FROM canteen_items WHERE item_id = $1`,
+      [itemId]
+    );
+  },
+
+  async toggleAvailability(pool, itemId, available) {
+    return pool.query(
+      `UPDATE canteen_items
+       SET available = $1,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE item_id = $2
+       RETURNING *`,
+      [available, itemId]
+    );
+  },
+};
+
+/* -----------------------------------------------------
+   🧠 Service Layer Pattern — CanteenService
+------------------------------------------------------ */
+const CanteenService = {
+  async fetchMenu(pool) {
+    return CanteenRepository.getMenu(pool);
+  },
+
+  async addItem(pool, body) {
+    const {
+      name,
+      description,
+      price,
+      category,
+      preparationTime,
+      mealType,
+      foodType,
+      created_by,
+    } = body;
+
+    return CanteenRepository.create(pool, [
+      name,
+      description,
+      price,
+      category,
+      preparationTime,
+      mealType,
+      foodType,
+      created_by,
+    ]);
+  },
+
+  async updateItem(pool, itemId, body) {
+    const {
+      name,
+      description,
+      price,
+      category,
+      preparationTime,
+      mealType,
+      foodType,
+    } = body;
+
+    return CanteenRepository.update(pool, [
+      name,
+      description,
+      price,
+      category,
+      preparationTime,
+      mealType,
+      foodType,
+      itemId,
+    ]);
+  },
+
+  async deleteItem(pool, itemId) {
+    return CanteenRepository.remove(pool, itemId);
+  },
+
+  async setAvailability(pool, itemId, available) {
+    return CanteenRepository.toggleAvailability(pool, itemId, available);
+  },
+};
+
+/* -----------------------------------------------------
+   🎮 Controller Pattern — Authority Canteen Routes
+------------------------------------------------------ */
+
+// GET menu
+router.get("/canteen-menu", async (req, res) => {
+  try {
+    const result = await CanteenService.fetchMenu(pool);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Error fetching menu:", err);
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+// POST new item
+router.post("/canteen-menu", async (req, res) => {
+  try {
+    const result = await CanteenService.addItem(pool, req.body);
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("Error adding item:", err);
+    res.status(500).json({ error: "Failed to add item" });
+  }
+});
+
+// PUT edit item
+router.put("/canteen-menu/:itemId", async (req, res) => {
+  try {
+    const result = await CanteenService.updateItem(
+      pool,
+      req.params.itemId,
+      req.body
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("Error updating item:", err);
+    res.status(500).json({ error: "Failed to update item" });
+  }
+});
+
+// DELETE item
+router.delete("/canteen-menu/:itemId", async (req, res) => {
+  try {
+    await CanteenService.deleteItem(pool, req.params.itemId);
+    res.json({ success: true, message: "Item deleted" });
+  } catch (err) {
+    console.error("Error deleting item:", err);
+    res.status(500).json({ error: "Failed to delete item" });
+  }
+});
+
+// PATCH availability
+router.patch("/canteen-menu/:itemId/availability", async (req, res) => {
+  try {
+    const result = await CanteenService.setAvailability(
+      pool,
+      req.params.itemId,
+      req.body.available
     );
     res.json(result.rows[0]);
   } catch (err) {

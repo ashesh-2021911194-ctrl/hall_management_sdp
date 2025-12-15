@@ -283,13 +283,13 @@ const CanteenSection = ({ user }) => {
   return (
     <>
       {userRole === "authority" ? (
-        <Box sx={{ display: "flex", minHeight: "100vh", bgcolor: "#f8fafc" }}>
+        <Box sx={{ display: "flex", minHeight: "100vh" }}>
           <Container maxWidth="lg" sx={{ py: 4 }}>
             {/* Header */}
             <Box
               sx={{
-                bgcolor: "primary.main",
-                color: "white",
+                bgcolor: "white",
+                color: "primary.main",
                 p: 4,
                 borderRadius: 2,
                 mb: 4,
@@ -329,7 +329,7 @@ const CanteenSection = ({ user }) => {
                 display: "flex",
                 alignItems: "center",
                 mb: 4,
-                bgcolor: alpha(theme.palette.primary.main, 0.05),
+                bgcolor: "white",
               }}
             >
               <IconButton sx={{ p: "10px" }}>

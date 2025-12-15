@@ -195,15 +195,14 @@ const filteredWaiting = waiting.filter(
   <Box
     sx={{
       minHeight: "100vh",
-      background: "linear-gradient(135deg, #1e3a8a 0%, #163997ff 50%, #063a70 100%)",
-      color: "#fff",
+      color: "primary.main",
       p: 4,
     }}
   >
     <Typography
       variant="h4"
       align="center"
-      sx={{ mb: 4, fontWeight: "bold", color: "#fff" }}
+      sx={{ mb: 4, fontWeight: "bold", color: "primary.main" }}
     >
       🏛️ Authority: Student List
     </Typography>
@@ -258,25 +257,39 @@ const filteredWaiting = waiting.filter(
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           sx={{
-            input: { color: "#ffffffff" },
-            label: { color: "#ffffffff" },
-            "& .MuiOutlinedInput-root": {
-              "& fieldset": { borderColor: "#ffffffff" },
-              "&:hover fieldset": { borderColor: "#ffffffff" },
-            },
-          }}
+        bgcolor: "white",
+        borderRadius: 1,
+        "& .MuiInputBase-input": {
+          color: "primary.main",
+        },
+        "& .MuiInputLabel-root": {
+          color: "primary.main",
+        },
+        "& .MuiOutlinedInput-root": {
+          "& fieldset": {
+            borderColor: "primary.main",
+          },
+          "&:hover fieldset": {
+            borderColor: "primary.main",
+          },
+          "&.Mui-focused fieldset": {
+            borderColor: "primary.main",
+          },
+        },
+      }}
         />
       </Grid>
 
       <Grid item xs={12} sm={6} md={4}>
         <FormControl fullWidth>
-          <InputLabel sx={{ color: "#ffffffff" }}>Year</InputLabel>
+          <InputLabel sx={{ color: "primary.main" }}>Year</InputLabel>
           <Select
             value={yearFilter}
             label="Year"
             onChange={(e) => setYearFilter(e.target.value)}
             sx={{
-              color: "#ffffffff",
+              bgcolor: "white",
+              color: "primary.main",
               minWidth: 150,
               "& .MuiOutlinedInput-notchedOutline": { borderColor: "#ffffffff" },
             }}
@@ -293,13 +306,14 @@ const filteredWaiting = waiting.filter(
       {tab === "allocated" && (
         <Grid item xs={12} sm={6} md={4}>
           <FormControl fullWidth>
-            <InputLabel sx={{ color: "#ffffffff" }}>Building</InputLabel>
+            <InputLabel sx={{ color: "primary.main" }}>Building</InputLabel>
             <Select
               value={buildingFilter}
               label="Building"
               onChange={(e) => setBuildingFilter(e.target.value)}
               sx={{
-                color: "#ffffffff",
+                bgcolor: "white",
+              color: "primary.main",
                 minWidth: 150,
                 "& .MuiOutlinedInput-notchedOutline": { borderColor: "#ffffffff" },
               }}
@@ -341,15 +355,15 @@ const filteredWaiting = waiting.filter(
 
     {/* Floor Selector */}
     <Box textAlign="center" sx={{ mb: 3 }}>
-      <Typography variant="subtitle1" sx={{ mr: 2, color: "#ccc" }}>
+      <Typography variant="subtitle1" sx={{ mr: 2, color: "primary.main" }}>
         Select Floor:
       </Typography>
       <Select
         value={floor}
         onChange={(e) => setFloor(Number(e.target.value))}
         sx={{
-          color: "#fff",
-          bgcolor: "rgba(255, 255, 255, 0.05)",
+          color: "primary.main",
+          bgcolor: "white",
           "& .MuiOutlinedInput-notchedOutline": { borderColor: "#555" },
         }}
       >
@@ -413,7 +427,7 @@ const filteredWaiting = waiting.filter(
                 <TableCell>
                   <Button
                     variant="contained"
-                    color="error"
+                    color="red"
                     onClick={() => handleDismiss(s)}
                     sx={{ borderRadius: 2, fontWeight: "bold" }}
                   >

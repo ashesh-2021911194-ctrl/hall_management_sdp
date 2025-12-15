@@ -126,7 +126,7 @@ const LoginPage = ({ setUser }) => {
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          bgcolor: "background.default",
+          //bgcolor: "background.default",
           px: 2,
         }}
       >
@@ -147,7 +147,7 @@ const LoginPage = ({ setUser }) => {
             variant="h4"
             sx={{
               mb: 3,
-              color: "#1976d2",
+              color: "#0a3561ff",
               fontWeight: "bold",
               textAlign: "center",
             }}

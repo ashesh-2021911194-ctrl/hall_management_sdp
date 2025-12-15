@@ -1,7 +1,7 @@
 // app.js
 import React, { useState, createContext, useContext } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
-import { ThemeProvider, createTheme } from "@mui/material/styles";
+//import { ThemeProvider, createTheme } from "@mui/material/styles";
 import CssBaseline from "@mui/material/CssBaseline";
 
 import ProfilePage from "./components/ProfilePage";
@@ -18,7 +18,11 @@ import SignupPage from "./components/SignupPage";
 /* -----------------------------------------------------
    🏭 Theme Factory Pattern
 ------------------------------------------------------ */
-class ThemeFactory {
+import { ThemeProvider } from "@mui/material/styles";
+import theme from "./components/theme";
+   // <— import NEW theme.js
+
+/*class ThemeFactory {
   static createAppTheme() {
     return createTheme({
       palette: {
@@ -37,7 +41,7 @@ class ThemeFactory {
       shape: { borderRadius: 12 },
     });
   }
-}
+}*/
 
 /* -----------------------------------------------------
    🌍 Context Pattern — User Context
@@ -64,7 +68,7 @@ function App() {
     localStorage.setItem("user", JSON.stringify(data));
   };
 
-  const theme = ThemeFactory.createAppTheme();
+  //const theme = ThemeFactory.createAppTheme();
 
   return (
     <ThemeProvider theme={theme}>
@@ -79,7 +83,7 @@ function App() {
             <Route path="/profile" element={<PrivateRoute user={user} element={<ProfilePage user={user} />} />} />
             <Route path="/notices" element={<PrivateRoute user={user} element={<NoticeBoard user={user} />} />} />
             <Route path="/canteen" element={<PrivateRoute user={user} element={<CanteenSection user={user} />} />} />
-            <Route path="/staff" element={<PrivateRoute user={user} element={<StaffInfoPage />} />} />
+            <Route path="/staff" element={<PrivateRoute user={user} element={<StaffInfoPage user={user} />} />} />
             <Route path="/complaints" element={<PrivateRoute user={user} element={<ComplaintFormPage user={user} />} />} />
             <Route path="/seat-allocation" element={<PrivateRoute user={user} element={<SeatAllocationSection user={user} />} />} />
             <Route path="*" element={<Navigate to="/" replace />} />

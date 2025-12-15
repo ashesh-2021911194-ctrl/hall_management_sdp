@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Box,
   Container,
@@ -39,13 +39,13 @@ import {
   Work as WorkIcon
 } from '@mui/icons-material';
 
-const StaffInfoPage = () => {
+const StaffInfoPage = ({ user }) => {
   const theme = useTheme();
   const [staff, setStaff] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [userRole, setUserRole] = useState('authority');
+  const userRole = user?.role || 'student';
   const [openDialog, setOpenDialog] = useState(false);
   const [selectedStaff, setSelectedStaff] = useState(null);
   const [newStaff, setNewStaff] = useState({
@@ -57,35 +57,70 @@ const StaffInfoPage = () => {
     image: null
   });
 
+  // Predefined roles and department mapping (memoized for stable reference)
+  const ROLES = useMemo(() => [
+    'Hall Manager',
+    'Assistant Manager',
+    'Technician',
+    'Caretaker',
+    'Security Officer',
+    'Accountant',
+    'Housekeeping Supervisor'
+  ], []);
+
+  const DEPARTMENTS_BY_ROLE = useMemo(() => ({
+    'Hall Manager': ['Administration'],
+    'Assistant Manager': ['Administration'],
+    'Technician': ['Maintenance', 'Electrical', 'Plumbing'],
+    'Caretaker': ['Maintenance', 'Grounds'],
+    'Security Officer': ['Security'],
+    'Accountant': ['Accounts', 'Finance'],
+    'Housekeeping Supervisor': ['Housekeeping', 'Laundry']
+  }), []);
+
+  // When role changes, default department to first available option for that role
+  useEffect(() => {
+    if (!newStaff.role) return;
+    const opts = DEPARTMENTS_BY_ROLE[newStaff.role] || ['Administration'];
+    if (!opts.includes(newStaff.department)) {
+      setNewStaff(prev => ({ ...prev, department: opts[0] }));
+    }
+  }, [newStaff.role, newStaff.department, DEPARTMENTS_BY_ROLE]);
+
+  const [filterRole, setFilterRole] = useState('');
+  const [filterDepartment, setFilterDepartment] = useState('');
+
   useEffect(() => {
     fetchStaff();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userRole, filterRole, filterDepartment]);
 
   const fetchStaff = async () => {
     try {
-      // Simulate API call
-      const mockStaff = [
-        {
-          id: 1,
-          name: 'John Smith',
-          role: 'Hall Manager',
-          email: 'john.smith@example.com',
-          phone: '+1 234 567 8900',
-          department: 'Administration',
-          image: null
-        },
-        {
-          id: 2,
-          name: 'Sarah Johnson',
-          role: 'Assistant Manager',
-          email: 'sarah.j@example.com',
-          phone: '+1 234 567 8901',
-          department: 'Administration',
-          image: null
-        }
-      ];
-      setStaff(mockStaff);
+      setLoading(true);
+      const params = new URLSearchParams();
+      if (filterRole) params.append('role', filterRole);
+      if (filterDepartment) params.append('department', filterDepartment);
+
+      const base = userRole === 'student' ? 'http://localhost:5000/api/admin/students/staff' : 'http://localhost:5000/api/authority/staff';
+      const url = params.toString() ? `${base}?${params.toString()}` : base;
+
+      const res = await fetch(url);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to fetch');
+      // normalize to client shape
+      const mapped = data.map(s => ({
+        id: s.staff_id || s.id,
+        name: s.name,
+        role: s.designation || s.role,
+        email: s.email,
+        phone: s.phone,
+        department: s.department,
+        image: s.image_url || null
+      }));
+      setStaff(mapped);
     } catch (err) {
+      console.error('fetchStaff error', err);
       setError('Failed to fetch staff information');
     } finally {
       setLoading(false);
@@ -93,15 +128,44 @@ const StaffInfoPage = () => {
   };
 
   const handleAddStaff = () => {
-    if (!newStaff.name || !newStaff.role || !newStaff.email) return;
+    if (!newStaff.name || !newStaff.role || !newStaff.email || !newStaff.department) return;
 
-    const staffMember = {
-      id: staff.length + 1,
-      ...newStaff
-    };
-
-    setStaff([staffMember, ...staff]);
-    handleCloseDialog();
+    // send to backend
+    (async () => {
+      try {
+        const authorityUsername = user?.user?.username || user?.username || JSON.parse(localStorage.getItem('user')||'{}')?.user?.username || JSON.parse(localStorage.getItem('user')||'{}')?.username;
+        const res = await fetch('http://localhost:5000/api/authority/staff', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Authority-Username': authorityUsername
+          },
+          body: JSON.stringify({
+            name: newStaff.name,
+            role: newStaff.role,
+            email: newStaff.email,
+            phone: newStaff.phone,
+            department: newStaff.department
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) return alert(data.error || 'Failed to add staff');
+        const staffMember = {
+          id: data.staff_id,
+          name: data.name,
+          role: data.designation,
+          email: data.email,
+          phone: data.phone,
+          department: data.department,
+          image: data.image_url || null
+        };
+        setStaff([staffMember, ...staff]);
+        handleCloseDialog();
+      } catch (err) {
+        console.error('Error adding staff:', err);
+        alert('Error adding staff');
+      }
+    })();
   };
 
   const handleEditStaff = (staffMember) => {
@@ -140,6 +204,16 @@ const StaffInfoPage = () => {
     member.department.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  // grid sizing and card styles differ for student vs authority view
+  const gridSize = userRole === 'student' ? { xs: 12, sm: 12, md: 6 } : { xs: 12, sm: 6, md: 4 };
+  const cardSxBase = {
+    height: '100%',
+    display: 'flex',
+    flexDirection: 'column',
+    transition: 'transform 0.2s, box-shadow 0.2s',
+    '&:hover': { transform: 'translateY(-4px)', boxShadow: theme.shadows[4] },
+  };
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
@@ -157,13 +231,13 @@ const StaffInfoPage = () => {
   }
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: '#f8fafc' }}>
+    <Box sx={{ display: 'flex', minHeight: '100vh' }}>
       <Container maxWidth="lg" sx={{ py: 4 }}>
         {/* Header */}
         <Box
           sx={{
-            bgcolor: 'primary.main',
-            color: 'white',
+            bgcolor: 'white',
+            color: 'primary.main',
             p: 4,
             borderRadius: 2,
             mb: 4,
@@ -199,7 +273,7 @@ const StaffInfoPage = () => {
             display: 'flex',
             alignItems: 'center',
             mb: 4,
-            bgcolor: alpha(theme.palette.primary.main, 0.05),
+            bgcolor: "white",
           }}
         >
           <IconButton sx={{ p: '10px' }} aria-label="search">
@@ -213,32 +287,56 @@ const StaffInfoPage = () => {
           />
         </Paper>
 
+        {/* Role / Department Filters (visible to students and authority) */}
+        <Box sx={{ display: 'flex', gap: 2, mb: 3, alignItems: 'center' }}>
+          <FormControl sx={{ minWidth: 220 }}>
+            <InputLabel id="filter-role-label">Filter by Role</InputLabel>
+            <Select
+              labelId="filter-role-label"
+              value={filterRole}
+              label="Filter by Role"
+              onChange={(e) => { setFilterRole(e.target.value); setFilterDepartment(''); }}
+            >
+              <MenuItem value="">All Roles</MenuItem>
+              {ROLES.map(r => <MenuItem key={r} value={r}>{r}</MenuItem>)}
+            </Select>
+          </FormControl>
+
+          <FormControl sx={{ minWidth: 220 }}>
+            <InputLabel id="filter-dept-label">Filter by Department</InputLabel>
+            <Select
+              labelId="filter-dept-label"
+              value={filterDepartment}
+              label="Filter by Department"
+              onChange={(e) => setFilterDepartment(e.target.value)}
+            >
+              <MenuItem value="">All Departments</MenuItem>
+              {(filterRole ? (DEPARTMENTS_BY_ROLE[filterRole] || []) : Array.from(new Set(Object.values(DEPARTMENTS_BY_ROLE).flat())))
+                .map(d => <MenuItem key={d} value={d}>{d}</MenuItem>)}
+            </Select>
+          </FormControl>
+        </Box>
+
         {/* Staff Grid */}
         <Grid container spacing={3}>
           {filteredStaff.map((member) => (
-            <Grid item xs={12} sm={6} md={4} key={member.id}>
+            <Grid item {...gridSize} key={member.id}>
               <Card
                 sx={{
-                  height: '100%',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  transition: 'transform 0.2s, box-shadow 0.2s',
-                  '&:hover': {
-                    transform: 'translateY(-4px)',
-                    boxShadow: theme.shadows[4],
-                  },
+                  ...cardSxBase,
+                  ...(userRole === 'student' ? { minHeight: 300, padding: 2 } : {}),
                 }}
               >
                 <CardContent>
                   <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                     <Avatar
                       src={member.image}
-                      sx={{ width: 64, height: 64, mr: 2 }}
+                      sx={{ width: userRole === 'student' ? 80 : 64, height: userRole === 'student' ? 80 : 64, mr: 2 }}
                     >
                       <PersonIcon />
                     </Avatar>
                     <Box>
-                      <Typography variant="h6">{member.name}</Typography>
+                      <Typography variant={userRole === 'student' ? 'h5' : 'h6'}>{member.name}</Typography>
                       <Typography variant="body2" color="text.secondary">
                         {member.role}
                       </Typography>
@@ -265,15 +363,15 @@ const StaffInfoPage = () => {
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
                       <EmailIcon sx={{ mr: 1, color: 'text.secondary' }} />
-                      <Typography variant="body2">{member.email}</Typography>
+                      <Typography variant={userRole === 'student' ? 'body1' : 'body2'}>{member.email}</Typography>
                     </Box>
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
                       <PhoneIcon sx={{ mr: 1, color: 'text.secondary' }} />
-                      <Typography variant="body2">{member.phone}</Typography>
+                      <Typography variant={userRole === 'student' ? 'body1' : 'body2'}>{member.phone}</Typography>
                     </Box>
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
                       <WorkIcon sx={{ mr: 1, color: 'text.secondary' }} />
-                      <Typography variant="body2">{member.department}</Typography>
+                      <Typography variant={userRole === 'student' ? 'body1' : 'body2'}>{member.department}</Typography>
                     </Box>
                   </Box>
                 </CardContent>
@@ -316,12 +414,19 @@ const StaffInfoPage = () => {
                 value={newStaff.name}
                 onChange={(e) => setNewStaff({ ...newStaff, name: e.target.value })}
               />
-              <TextField
-                label="Role"
-                fullWidth
-                value={newStaff.role}
-                onChange={(e) => setNewStaff({ ...newStaff, role: e.target.value })}
-              />
+              <FormControl fullWidth>
+                <InputLabel id="role-select-label">Role</InputLabel>
+                <Select
+                  labelId="role-select-label"
+                  label="Role"
+                  value={newStaff.role}
+                  onChange={(e) => setNewStaff({ ...newStaff, role: e.target.value })}
+                >
+                  {ROLES.map(r => (
+                    <MenuItem key={r} value={r}>{r}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
               <TextField
                 label="Email"
                 fullWidth
@@ -335,12 +440,19 @@ const StaffInfoPage = () => {
                 value={newStaff.phone}
                 onChange={(e) => setNewStaff({ ...newStaff, phone: e.target.value })}
               />
-              <TextField
-                label="Department"
-                fullWidth
-                value={newStaff.department}
-                onChange={(e) => setNewStaff({ ...newStaff, department: e.target.value })}
-              />
+              <FormControl fullWidth>
+                <InputLabel id="dept-select-label">Department</InputLabel>
+                <Select
+                  labelId="dept-select-label"
+                  label="Department"
+                  value={newStaff.department}
+                  onChange={(e) => setNewStaff({ ...newStaff, department: e.target.value })}
+                >
+                  {(DEPARTMENTS_BY_ROLE[newStaff.role] || ['Administration']).map(d => (
+                    <MenuItem key={d} value={d}>{d}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
             </Box>
           </DialogContent>
           <DialogActions>
@@ -348,7 +460,7 @@ const StaffInfoPage = () => {
             <Button
               onClick={handleAddStaff}
               variant="contained"
-              disabled={!newStaff.name || !newStaff.role || !newStaff.email}
+              disabled={!newStaff.name || !newStaff.role || !newStaff.email || !newStaff.department}
             >
               {selectedStaff ? 'Save Changes' : 'Add Staff'}
             </Button>

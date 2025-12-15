@@ -1,7 +1,9 @@
-import React, { useState } from "react";
+// app.js
+import React, { useState, createContext, useContext } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import CssBaseline from "@mui/material/CssBaseline";
+
 import ProfilePage from "./components/ProfilePage";
 import HomePage from "./components/HomePage";
 import DocumentUploadForm from "./components/DocumentUploadForm";
@@ -11,153 +13,79 @@ import StaffInfoPage from "./components/StaffInfoPage";
 import ComplaintFormPage from "./components/ComplaintFormPage";
 import SeatAllocationSection from "./components/SeatAllocationSection";
 import LoginPage from "./components/LoginPage";
-import SignupForm from "./components/SignupForm";
-//import StudentCanteenView from "./components/StudentCanteenView";
-//import { createTheme } from '@mui/material/styles';
+import SignupPage from "./components/SignupPage";
 
-const theme = createTheme({
-  palette: {
-    primary: {
-      main: '#1e40af',
-      light: '#3b82f6',
-      dark: '#1e3a8a',
-      contrastText: '#ffffff',
-    },
-    secondary: {
-      main: '#ea580c',
-      light: '#f97316',
-      dark: '#c2410c',
-      contrastText: '#ffffff',
-    },
-    background: {
-      default: '#ffffff',
-      paper: '#ffffff',
-    },
-    text: {
-      primary: '#1f2937',
-      secondary: '#6b7280',
-    },
-  },
-  typography: {
-    fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
-    h1: { fontWeight: 800, letterSpacing: '-0.02em' },
-    h2: { fontWeight: 700, letterSpacing: '-0.01em' },
-    h3: { fontWeight: 600, letterSpacing: '-0.005em' },
-    h4: { fontWeight: 600 },
-    h5: { fontWeight: 600 },
-    h6: { fontWeight: 600 },
-    subtitle1: { fontWeight: 500, lineHeight: 1.6 },
-    subtitle2: { fontWeight: 500, lineHeight: 1.6 },
-    button: { fontWeight: 600, textTransform: 'none', letterSpacing: '0.3px' },
-  },
-  shape: { borderRadius: 12 },
-  components: {
-    MuiButton: {
-      styleOverrides: {
-        root: {
-          borderRadius: 10,
-          textTransform: 'none',
-          fontWeight: 600,
-          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-          boxShadow: 'none',
-          '&:hover': {
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-            transform: 'translateY(-2px)',
-          },
-        },
-        contained: {
-          background: 'linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%)',
-          '&:hover': {
-            background: 'linear-gradient(135deg, #1e3a8a 0%, #172555 100%)',
-          },
-        },
+/* -----------------------------------------------------
+   🏭 Theme Factory Pattern
+------------------------------------------------------ */
+class ThemeFactory {
+  static createAppTheme() {
+    return createTheme({
+      palette: {
+        primary: { main: "#1e40af", light: "#3b82f6", dark: "#1e3a8a", contrastText: "#fff" },
+        secondary: { main: "#ea580c", light: "#f97316", dark: "#c2410c", contrastText: "#fff" },
+        background: { default: "#fff", paper: "#fff" },
+        text: { primary: "#1f2937", secondary: "#6b7280" },
       },
-    },
-    MuiCard: {
-      styleOverrides: {
-        root: {
-          borderRadius: 16,
-          background: 'linear-gradient(135deg, #ffffff 0%, #f9fafb 100%)',
-          border: '1px solid rgba(0, 0, 0, 0.06)',
-          boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04)',
-          transition: 'all 0.3s ease',
-          '&:hover': {
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.12), 0 10px 10px -5px rgba(0, 0, 0, 0.06)',
-            transform: 'translateY(-4px)',
-            border: '1px solid rgba(30, 64, 175, 0.1)',
-          },
-        },
+      typography: {
+        fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
+        h1: { fontWeight: 800 },
+        h2: { fontWeight: 700 },
+        h3: { fontWeight: 600 },
+        button: { fontWeight: 600, textTransform: "none" },
       },
-    },
-    MuiPaper: {
-      styleOverrides: {
-        root: {
-          borderRadius: 16,
-          background: 'linear-gradient(135deg, #ffffff 0%, #f9fafb 100%)',
-          border: '1px solid rgba(0, 0, 0, 0.06)',
-        },
-      },
-    },
-    MuiAppBar: {
-      styleOverrides: {
-        root: {
-          background: 'linear-gradient(90deg, #1e40af 0%, #1e3a8a 100%)',
-          boxShadow: '0 4px 20px rgba(30, 64, 175, 0.15)',
-          borderBottom: 'none',
-        },
-      },
-    },
-    MuiTextField: {
-      styleOverrides: {
-        root: {
-          '& .MuiOutlinedInput-root': {
-            transition: 'all 0.3s ease',
-            '&:hover fieldset': { borderColor: '#3b82f6' },
-            '&.Mui-focused fieldset': {
-              boxShadow: '0 0 0 3px rgba(30, 64, 175, 0.1)',
-            },
-          },
-        },
-      },
-    },
-  },
-});
+      shape: { borderRadius: 12 },
+    });
+  }
+}
 
+/* -----------------------------------------------------
+   🌍 Context Pattern — User Context
+------------------------------------------------------ */
+const UserContext = createContext(null);
+export const useUser = () => useContext(UserContext);
+
+/* -----------------------------------------------------
+   🛡️ Guard Pattern — Private Route Wrapper
+------------------------------------------------------ */
+const PrivateRoute = ({ element, user }) => (user ? element : <Navigate to="/" />);
+
+/* -----------------------------------------------------
+   🚀 Main App Component
+------------------------------------------------------ */
 function App() {
-  // Load user from localStorage if available
   const [user, setUser] = useState(() => {
     const saved = localStorage.getItem("user");
     return saved ? JSON.parse(saved) : null;
   });
 
-  // Save user to state AND localStorage
   const handleSetUser = (data) => {
     setUser(data);
     localStorage.setItem("user", JSON.stringify(data));
   };
 
+  const theme = ThemeFactory.createAppTheme();
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Router>
-        <Routes>
-          <Route path="/" element={<LoginPage setUser={handleSetUser} />} />
-          <Route path="/signup" element={<SignupForm />} />
-          <Route path="/home" element={user ? <HomePage user={user} /> : <Navigate to="/" />} />
-
-          <Route
-  path="/documents"
-  element={user ? <DocumentUploadForm user={user} /> : <Navigate to="/" />}
-/>
-          <Route path="/profile" element={user ? <ProfilePage user={user} /> : <Navigate to="/" />} />
-          <Route path="/notices" element={user ? <NoticeBoard user={user} /> : <Navigate to="/" />} />
-          <Route path="/canteen" element={user ? <CanteenSection user={user}/> : <Navigate to="/" />} />
-          <Route path="/staff" element={user ? <StaffInfoPage /> : <Navigate to="/" />} />
-          <Route path="/complaints" element={user ? <ComplaintFormPage user={user} /> : <Navigate to="/" />} />
-          <Route path="/seat-allocation" element={user ? <SeatAllocationSection user={user} /> : <Navigate to="/" />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Router>
+      <UserContext.Provider value={{ user, setUser: handleSetUser }}>
+        <Router>
+          <Routes>
+            <Route path="/" element={<LoginPage setUser={handleSetUser} />} />
+            <Route path="/signup" element={<SignupPage />} />
+            <Route path="/home" element={<PrivateRoute user={user} element={<HomePage user={user} />} />} />
+            <Route path="/documents" element={<PrivateRoute user={user} element={<DocumentUploadForm user={user} />} />} />
+            <Route path="/profile" element={<PrivateRoute user={user} element={<ProfilePage user={user} />} />} />
+            <Route path="/notices" element={<PrivateRoute user={user} element={<NoticeBoard user={user} />} />} />
+            <Route path="/canteen" element={<PrivateRoute user={user} element={<CanteenSection user={user} />} />} />
+            <Route path="/staff" element={<PrivateRoute user={user} element={<StaffInfoPage />} />} />
+            <Route path="/complaints" element={<PrivateRoute user={user} element={<ComplaintFormPage user={user} />} />} />
+            <Route path="/seat-allocation" element={<PrivateRoute user={user} element={<SeatAllocationSection user={user} />} />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Router>
+      </UserContext.Provider>
     </ThemeProvider>
   );
 }

@@ -59,6 +59,35 @@ ORDER BY s.score DESC, w.added_on ASC
   }
 });
 
+// GET /api/admin/students/staff
+// Returns staff entries added by authority. Supports optional filtering by role and department via query params.
+router.get('/staff', async (req, res) => {
+  try {
+    const { role, department } = req.query;
+    const conditions = [];
+    const params = [];
+    let idx = 1;
+
+    if (role) {
+      conditions.push(`designation = $${idx++}`);
+      params.push(role);
+    }
+    if (department) {
+      conditions.push(`department = $${idx++}`);
+      params.push(department);
+    }
+
+    const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const q = `SELECT staff_id, name, designation AS role, email, phone, department, created_at FROM staff ${whereClause} ORDER BY created_at DESC`;
+    const result = await pool.query(q, params);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error fetching staff for students:', err);
+    res.status(500).json({ error: 'Database error' });
+  }
+});
+
 // ✅ Fill Vacant Seat (Assign top waiting student to a room)
 router.post("/fill-vacant/:roomId", async (req, res) => {
   const { roomId } = req.params;
@@ -776,12 +805,13 @@ router.post("/notices/:noticeId/upload", upload.single("document"), async (req, 
       return res.status(400).json({ error: "File is required" });
     }
 
-    await pool.query(
-      `INSERT INTO notice_documents (notice_id, file_path, uploaded_at) VALUES ($1, $2, NOW())`,
-      [noticeId, file.path]
+    const webPath = `/uploads/${file.filename}`;
+    const insertRes = await pool.query(
+      `INSERT INTO notice_documents (notice_id, file_path, uploaded_at) VALUES ($1, $2, NOW()) RETURNING *`,
+      [noticeId, webPath]
     );
 
-    return res.json({ message: "Document uploaded successfully" });
+    return res.json({ message: "Document uploaded successfully", document: insertRes.rows[0] });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: "Database error" });
@@ -789,7 +819,7 @@ router.post("/notices/:noticeId/upload", upload.single("document"), async (req, 
 });
 
 
-router.post("/complaints", async (req, res) => {
+/*router.post("/complaints", async (req, res) => {
   const {
     allStudentId,
     title,
@@ -897,12 +927,128 @@ router.get("/complaints/:allStudentId", async (req, res) => {
     console.error("Error fetching complaints:", err);
     res.status(500).json({ error: "Server error" });
   }
+});*/
+/* -----------------------------------------------------
+   🧱 Repository Pattern — ComplaintRepository
+------------------------------------------------------ */
+const ComplaintRepository = {
+  async mapStudent(pool, allStudentId) {
+    return pool.query(
+      `SELECT student_id 
+       FROM students 
+       WHERE roll_no = (
+         SELECT roll_no FROM all_students WHERE all_student_id = $1
+       )`,
+      [allStudentId]
+    );
+  },
+
+  async insertComplaint(pool, data) {
+    return pool.query(
+      `INSERT INTO complaints
+      (student_id, title, description, complaint_type, building, floor_no, block_no, room_no, is_custom)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       RETURNING *`,
+      data
+    );
+  },
+
+  async getComplaints(pool, studentId) {
+    return pool.query(
+      `SELECT c.*, s.name AS student_name
+       FROM complaints c
+       JOIN students s ON c.student_id = s.student_id
+       WHERE c.student_id = $1
+       ORDER BY c.created_at DESC`,
+      [studentId]
+    );
+  },
+};
+
+/* -----------------------------------------------------
+   🧠 Service Layer Pattern — ComplaintService
+------------------------------------------------------ */
+const ComplaintService = {
+  async create(pool, payload) {
+    const {
+      allStudentId,
+      title,
+      description,
+      complaint_type,
+      building,
+      floor_no,
+      block_no,
+      room_no,
+      is_custom,
+    } = payload;
+
+    if (!allStudentId || !building || !floor_no)
+      throw { status: 400, message: "Missing required fields" };
+
+    const map = await ComplaintRepository.mapStudent(pool, allStudentId);
+    if (!map.rows.length)
+      throw { status: 404, message: "Student not found in hall" };
+
+    const studentId = map.rows[0].student_id;
+
+    return ComplaintRepository.insertComplaint(pool, [
+      studentId,
+      title || null,
+      description || null,
+      complaint_type || null,
+      building,
+      floor_no,
+      block_no || null,
+      room_no || null,
+      is_custom || false,
+    ]);
+  },
+};
+
+/* -----------------------------------------------------
+   🎮 Controller Pattern — Routes
+------------------------------------------------------ */
+
+// POST complaint
+router.post("/complaints", async (req, res) => {
+  try {
+    const result = await ComplaintService.create(pool, req.body);
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    if (err.code === "23505") {
+      return res.status(409).json({
+        error: "This complaint already exists and is being processed.",
+      });
+    }
+    res.status(err.status || 500).json({ error: err.message || "DB error" });
+  }
 });
 
-// GET canteen menu (accessible to all - students & authority)
-router.get("/canteen-menu", async (req, res) => {
+// GET complaints (student)
+router.get("/complaints/:allStudentId", async (req, res) => {
+  const id = parseInt(req.params.allStudentId, 10);
+  if (isNaN(id)) return res.status(400).json({ error: "Invalid student ID" });
+
   try {
-    const result = await pool.query(`
+    const map = await ComplaintRepository.mapStudent(pool, id);
+    if (!map.rows.length)
+      return res.status(404).json({ error: "Student not found" });
+
+    const studentId = map.rows[0].student_id;
+    const result = await ComplaintRepository.getComplaints(pool, studentId);
+    res.json(result.rows);
+  } catch {
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+
+/* -----------------------------------------------------
+   🧱 Repository Pattern — Data Access Layer
+------------------------------------------------------ */
+const CanteenRepository = {
+  async getMenu(pool) {
+    return pool.query(`
       SELECT ci.*, 
              COALESCE(AVG(cr.rating), 0) as average_rating,
              COUNT(cr.review_id) as review_count
@@ -911,134 +1057,128 @@ router.get("/canteen-menu", async (req, res) => {
       GROUP BY ci.item_id
       ORDER BY ci.created_at DESC
     `);
-    res.json(result.rows);
-  } catch (err) {
-    console.error("Error fetching menu:", err);
-    res.status(500).json({ error: "Database error" });
-  }
-});
+  },
 
-// GET reviews for a specific item
-router.get("/canteen-menu/:itemId/reviews", async (req, res) => {
-  const { itemId } = req.params;
-  
-  try {
-    const result = await pool.query(
+  async getReviews(pool, itemId) {
+    return pool.query(
       `SELECT * FROM canteen_reviews 
        WHERE item_id = $1 
        ORDER BY review_date DESC`,
       [itemId]
     );
+  },
+
+  async insertReview(pool, data) {
+    return pool.query(
+      `INSERT INTO canteen_reviews 
+       (item_id, all_student_id, student_name, roll_no, rating, comment, user_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
+       RETURNING *`,
+      data
+    );
+  },
+
+  async deleteReview(pool, reviewId, studentId) {
+    return pool.query(
+      `DELETE FROM canteen_reviews 
+       WHERE review_id = $1 AND all_student_id = $2
+       RETURNING *`,
+      [reviewId, studentId]
+    );
+  },
+};
+
+/* -----------------------------------------------------
+   🧠 Service Layer Pattern — Business Logic
+------------------------------------------------------ */
+const CanteenService = {
+  async addReview(pool, itemId, payload) {
+    const {
+      all_student_id,
+      student_name,
+      roll_no,
+      rating,
+      comment,
+      user_id,
+    } = payload;
+
+    const parsedItemId = parseInt(itemId, 10);
+    if (isNaN(parsedItemId)) throw new Error("Invalid itemId");
+
+    let effectiveStudentId = all_student_id;
+
+    if (!effectiveStudentId && roll_no) {
+      const map = await pool.query(
+        `SELECT all_student_id FROM all_students WHERE roll_no = $1 LIMIT 1`,
+        [roll_no]
+      );
+      effectiveStudentId = map.rows[0]?.all_student_id;
+    }
+
+    if (!effectiveStudentId) throw new Error("Student not found");
+
+    return CanteenRepository.insertReview(pool, [
+      parsedItemId,
+      effectiveStudentId,
+      student_name || null,
+      roll_no || null,
+      Number(rating),
+      comment?.trim() || null,
+      user_id || String(effectiveStudentId),
+    ]);
+  },
+};
+
+/* -----------------------------------------------------
+   🎮 Controller Pattern — Route Controllers
+------------------------------------------------------ */
+router.get("/canteen-menu", async (req, res) => {
+  try {
+    const result = await CanteenRepository.getMenu(pool);
     res.json(result.rows);
   } catch (err) {
-    console.error("Error fetching reviews:", err);
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+router.get("/canteen-menu/:itemId/reviews", async (req, res) => {
+  try {
+    const result = await CanteenRepository.getReviews(
+      pool,
+      req.params.itemId
+    );
+    res.json(result.rows);
+  } catch {
     res.status(500).json({ error: "Failed to fetch reviews" });
   }
 });
 
-// POST - Add review (Students only)
 router.post("/canteen-menu/:itemId/reviews", async (req, res) => {
-  const { itemId } = req.params;
-  const { all_student_id, student_name, roll_no, rating, comment, user_id } = req.body;
-  // Log incoming payload for debugging
-  console.log('POST /canteen-menu/:itemId/reviews - itemId:', itemId);
-  console.log('Request body:', req.body);
-
-  // Validate inputs
-  const parsedItemId = parseInt(itemId, 10);
-  if (isNaN(parsedItemId)) {
-    return res.status(400).json({ error: 'Invalid itemId' });
-  }
-
-  // If frontend didn't send all_student_id but did send roll_no, try to map it
-  let effectiveAllStudentId = all_student_id;
-  if (!effectiveAllStudentId && roll_no) {
-    try {
-      const mapRes = await pool.query(
-        `SELECT all_student_id FROM all_students WHERE roll_no = $1 LIMIT 1`,
-        [roll_no]
-      );
-      if (mapRes.rows.length > 0) {
-        effectiveAllStudentId = mapRes.rows[0].all_student_id;
-        console.log(`Mapped roll_no ${roll_no} -> all_student_id ${effectiveAllStudentId}`);
-      }
-    } catch (mapErr) {
-      console.error('Error mapping roll_no to all_student_id:', mapErr);
-    }
-  }
-
-  if (!effectiveAllStudentId) {
-    return res.status(400).json({ error: 'Missing all_student_id (and mapping via roll_no failed)' });
-  }
-
-  // Ensure rating is a number (and within expected range 1-5)
-  const numericRating = rating !== undefined && rating !== null ? Number(rating) : null;
-  if (numericRating === null || Number.isNaN(numericRating)) {
-    return res.status(400).json({ error: 'Invalid or missing rating' });
-  }
-
-  const safeComment = (typeof comment === 'string' && comment.trim().length > 0) ? comment.trim() : null;
-  // Ensure we have a non-null user_id (DB schema requires NOT NULL)
-  const finalUserId = (user_id !== undefined && user_id !== null && String(user_id).trim() !== "")
-    ? String(user_id)
-    : String(effectiveAllStudentId);
-
   try {
-    // Validate that the canteen item exists to surface clearer errors
-    const itemCheck = await pool.query(`SELECT item_id FROM canteen_items WHERE item_id = $1 LIMIT 1`, [parsedItemId]);
-    if (itemCheck.rows.length === 0) {
-      return res.status(400).json({ error: 'Invalid item_id: item not found' });
-    }
-
-    // Validate that the all_student_id exists (avoid FK violation)
-    const studentCheck = await pool.query(`SELECT all_student_id FROM all_students WHERE all_student_id = $1 LIMIT 1`, [effectiveAllStudentId]);
-    if (studentCheck.rows.length === 0) {
-      return res.status(400).json({ error: 'Invalid all_student_id: student not found' });
-    }
-
-    const result = await pool.query(
-      `INSERT INTO canteen_reviews 
-       (item_id, all_student_id, student_name, roll_no, rating, comment, user_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING *`,
-      [parsedItemId, effectiveAllStudentId, student_name || null, roll_no || null, numericRating, safeComment, finalUserId]
+    const result = await CanteenService.addReview(
+      pool,
+      req.params.itemId,
+      req.body
     );
-
-    return res.status(201).json(result.rows[0]);
+    res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error('Error adding review (db):', err && err.stack ? err.stack : err);
-    // Include DB error code/constraint for easier debugging locally
-    const details = {
-      message: err && err.message ? err.message : String(err),
-      code: err && err.code ? err.code : undefined,
-      constraint: err && err.constraint ? err.constraint : undefined,
-      detail: err && err.detail ? err.detail : undefined,
-    };
-    return res.status(500).json({ error: 'Failed to add review', details });
+    res.status(400).json({ error: err.message });
   }
 });
 
-
-// DELETE review (Student can delete own review)
 router.delete("/canteen-menu/reviews/:reviewId", async (req, res) => {
-  const { reviewId } = req.params;
-  const { all_student_id } = req.body;
-  
   try {
-    const result = await pool.query(
-      `DELETE FROM canteen_reviews 
-       WHERE review_id = $1 AND all_student_id = $2
-       RETURNING *`,
-      [reviewId, all_student_id]
+    const result = await CanteenRepository.deleteReview(
+      pool,
+      req.params.reviewId,
+      req.body.all_student_id
     );
-    
-    if (result.rows.length === 0) {
+
+    if (result.rows.length === 0)
       return res.status(403).json({ error: "Unauthorized" });
-    }
-    
-    res.json({ success: true, message: "Review deleted" });
-  } catch (err) {
-    console.error("Error deleting review:", err);
+
+    res.json({ success: true });
+  } catch {
     res.status(500).json({ error: "Failed to delete review" });
   }
 });

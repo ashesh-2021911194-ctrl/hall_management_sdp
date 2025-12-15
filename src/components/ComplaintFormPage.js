@@ -35,7 +35,8 @@ import {
 } from '@mui/icons-material';
 import axios from "axios";
 
-const ComplaintFormPage = ({ user }) => {
+
+/*const ComplaintFormPage = ({ user }) => {
   const theme = useTheme();
   const [complaints, setComplaints] = useState([]);
   const [loading, setLoading] = useState(user?.role === "authority");
@@ -301,7 +302,279 @@ const ComplaintFormPage = ({ user }) => {
       category.includes(q) ||
       studentName.includes(q)
     );
+  });*/
+  /* -----------------------------------------------------
+   ⚙️ Facade Pattern — Complaint API Facade
+   ------------------------------------------------------
+   Centralizes all complaint-related HTTP calls so
+   components don't deal with URLs or axios logic.
+------------------------------------------------------ */
+const ComplaintAPI = {
+  getBase(role) {
+    return role === "authority"
+      ? "http://localhost:5000/api/authority/complaints"
+      : "http://localhost:5000/api/admin/students/complaints";
+  },
+
+  async fetchComplaints(role, studentId) {
+    const base = this.getBase(role);
+    const url = role === "student" ? `${base}/${studentId}` : base;
+    return axios.get(url);
+  },
+
+  async submitComplaint(payload) {
+    return axios.post(
+      "http://localhost:5000/api/admin/students/complaints",
+      payload
+    );
+  },
+
+  async updateStatus(id, status) {
+    return axios.put(
+      `http://localhost:5000/api/authority/complaints/${id}/status`,
+      { status }
+    );
+  },
+
+  async respond(id, response) {
+    return axios.put(
+      `http://localhost:5000/api/authority/complaints/${id}/respond`,
+      { response, status: "Resolved" }
+    );
+  },
+};
+
+/* -----------------------------------------------------
+   🏭 Factory Pattern — Student Resolver
+   ------------------------------------------------------
+   Safely extracts all_student_id from deeply nested
+   user objects (shared logic across features).
+------------------------------------------------------ */
+const StudentFactory = {
+  resolve(user) {
+    if (!user) return null;
+    let cur = user;
+    for (let i = 0; i < 4; i++) {
+      if (cur?.allStudentId || cur?.all_student_id) return cur;
+      cur = cur?.user;
+    }
+    return null;
+  },
+};
+
+/* -----------------------------------------------------
+   🧠 Container Component — ComplaintFormPage
+------------------------------------------------------ */
+const ComplaintFormPage = ({ user }) => {
+  const theme = useTheme();
+
+  /* -----------------------------------------------------
+     🔁 Observer Pattern — React State
+  ------------------------------------------------------ */
+  const [complaints, setComplaints] = useState([]);
+  const [loading, setLoading] = useState(user?.role === "authority");
+  const [error, setError] = useState(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  /* -----------------------------------------------------
+   🪟 UI View State — Dialog & Selection
+------------------------------------------------------ */
+const [viewDialog, setViewDialog] = useState(false);
+const [viewComplaint, setViewComplaint] = useState(null);
+
+  const [openDialog, setOpenDialog] = useState(false);
+  const [replyDialog, setReplyDialog] = useState(false);
+  const [selectedComplaint, setSelectedComplaint] = useState(null);
+  const [reply, setReply] = useState("");
+
+  const [newComplaint, setNewComplaint] = useState({
+    title: "",
+    description: "",
+    complaintType: "",
+    customComplaint: "",
+    building: "",
+    floor: "",
+    block: "",
+    room: "",
+    category: "",
+    priority: "medium",
+    status: "pending",
   });
+
+  const userRole = user?.role || "student";
+  const studentObj = StudentFactory.resolve(user);
+  const studentId = studentObj?.allStudentId || studentObj?.all_student_id;
+
+  /* -----------------------------------------------------
+   🎨 Strategy Pattern — Status → Icon Resolver
+------------------------------------------------------ */
+const getStatusIcon = (status) => {
+  switch (status) {
+    case "resolved":
+      return <CheckCircleIcon color="success" />;
+    case "in-progress":
+      return <PendingIcon color="warning" />;
+    case "rejected":
+      return <CancelIcon color="error" />;
+    default:
+      return <PendingIcon color="disabled" />;
+  }
+};
+
+/* -----------------------------------------------------
+   🧠 Command Pattern — Close Any Dialog Safely
+------------------------------------------------------ */
+const handleCloseDialog = () => {
+  setOpenDialog(false);
+  setReplyDialog(false);
+  setViewDialog(false);
+
+  setSelectedComplaint(null);
+  setViewComplaint(null);
+  setReply("");
+
+  setNewComplaint({
+    title: "",
+    description: "",
+    complaintType: "",
+    customComplaint: "",
+    building: "",
+    floor: "",
+    block: "",
+    room: "",
+    category: "",
+    priority: "medium",
+    status: "pending",
+  });
+};
+
+/* -----------------------------------------------------
+   🧠 Command Pattern — Submit Authority Reply
+------------------------------------------------------ */
+const handleSubmitReply = async () => {
+  if (!reply.trim() || !selectedComplaint) return;
+
+  try {
+    await ComplaintAPI.respond(selectedComplaint.id, reply);
+    setReplyDialog(false);
+    setReply("");
+    fetchComplaints();
+  } catch (err) {
+    console.error("Error submitting reply:", err);
+    setError("Failed to send response");
+  }
+};
+
+  /* -----------------------------------------------------
+     🧠 Command Pattern — Fetch Complaints
+  ------------------------------------------------------ */
+  const fetchComplaints = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await ComplaintAPI.fetchComplaints(userRole, studentId);
+
+      const mapped = (res.data || []).map((c) => ({
+        id: c.complaint_id,
+        complaint: c.complaint || c.title,
+        description: c.description,
+        building: c.building,
+        floor: c.floor_no,
+        block: c.block_no,
+        room: c.room_no,
+        status: c.status,
+        date: new Date(c.created_at).toLocaleDateString(),
+        reply: c.response,
+        studentName: c.student_name,
+      }));
+
+      setComplaints(mapped);
+    } catch (err) {
+      console.error(err);
+      setError("Failed to fetch complaints");
+    } finally {
+      setLoading(false);
+    }
+  }, [userRole, studentId]);
+
+  useEffect(() => {
+    if ((userRole === "student" && studentId) || userRole === "authority") {
+      fetchComplaints();
+    }
+  }, [fetchComplaints, userRole, studentId]);
+
+  /* -----------------------------------------------------
+     🧠 Command Pattern — Submit Complaint
+  ------------------------------------------------------ */
+  const handleAddComplaint = async () => {
+    if (!studentId) {
+      setError("Student ID not loaded");
+      return;
+    }
+
+    try {
+      await ComplaintAPI.submitComplaint({
+        allStudentId: studentId,
+        title: newComplaint.title,
+        description: newComplaint.description,
+        complaint_type: newComplaint.complaintType || null,
+        building: newComplaint.building,
+        floor_no: newComplaint.floor,
+        block_no: newComplaint.block || null,
+        room_no: newComplaint.room || null,
+        is_custom: newComplaint.complaintType === "Other",
+      });
+
+      alert("Complaint submitted successfully!");
+      setOpenDialog(false);
+      setNewComplaint({
+        title: "",
+        description: "",
+        complaintType: "",
+        customComplaint: "",
+        building: "",
+        floor: "",
+        block: "",
+        room: "",
+        category: "",
+        priority: "medium",
+        status: "pending",
+      });
+
+      fetchComplaints();
+    } catch (err) {
+      if (err.response?.status === 409) {
+        alert(err.response.data.error);
+        return;
+      }
+      setError("Failed to submit complaint");
+    }
+  };
+
+  /* -----------------------------------------------------
+     🧠 Command Pattern — Authority Actions
+  ------------------------------------------------------ */
+  const handleStatusChange = async (id, status) => {
+    await ComplaintAPI.updateStatus(id, status);
+    fetchComplaints();
+  };
+
+  const handleReplySubmit = async () => {
+    await ComplaintAPI.respond(selectedComplaint.id, reply);
+    setReplyDialog(false);
+    fetchComplaints();
+  };
+
+  /* -----------------------------------------------------
+     🔍 Strategy Pattern — Search Filtering
+  ------------------------------------------------------ */
+  const q = searchQuery.toLowerCase();
+  const filteredComplaints = complaints.filter((c) =>
+    [c.complaint, c.description, c.studentName]
+      .join(" ")
+      .toLowerCase()
+      .includes(q)
+  );
+
+  
 
   if (loading) {
     return (
@@ -332,36 +605,47 @@ const ComplaintFormPage = ({ user }) => {
       minHeight: '100vh',
       position: 'relative',
       bgcolor: 'transparent', // remove solid color
-      background: 'linear-gradient(to bottom, #0B3D91 50%, #ffffff 50%)',
+      //background: 'linear-gradient(to bottom, #0B3D91 50%, #ffffff 50%)',
       overflow: 'hidden',
       py: 6,
     }}
   >
     {/* Background Circles */}
-    <Box
-      sx={{
-        position: 'absolute',
-        width: 200,
-        height: 200,
-        bgcolor: 'rgba(255,255,255,0.05)',
-        borderRadius: '50%',
-        top: '10%',
-        left: '5%',
-        filter: 'blur(40px)',
-      }}
-    />
-    <Box
-      sx={{
-        position: 'absolute',
-        width: 300,
-        height: 300,
-        bgcolor: 'rgba(255,255,255,0.04)',
-        borderRadius: '50%',
-        bottom: '15%',
-        right: '10%',
-        filter: 'blur(60px)',
-      }}
-    />
+    {/* ======= Dark Blue Half + Circles ======= */}
+          <Box
+            sx={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: "100%",
+              height: "50%",
+              //bgcolor: "#0B3D91",
+              zIndex: 0,
+            }}
+          >
+            <Box
+              sx={{
+                position: "absolute",
+                width: 200,
+                height: 200,
+                borderRadius: "50%",
+                bgcolor: "rgba(255,255,255,0.1)",
+                top: "20%",
+                left: "30%",
+              }}
+            />
+            <Box
+              sx={{
+                position: "absolute",
+                width: 250,
+                height: 250,
+                borderRadius: "50%",
+                bgcolor: "rgba(255,255,255,0.15)",
+                top: "25%",
+                left: "40%",
+              }}
+            />
+          </Box>
 
     <Container maxWidth="lg" sx={{ position: 'relative', zIndex: 2 }}>
       {/* Header */}
@@ -422,129 +706,138 @@ const ComplaintFormPage = ({ user }) => {
         />
       </Paper>
 
-      {/* Complaints Grid */}
-      {filteredComplaints.length === 0 ? (
-        <Alert severity="info" sx={{ mb: 4, borderRadius: 2 }}>
-          No complaints yet. Click the + button above to submit one.
-        </Alert>
-      ) : (
-        <Grid container spacing={3}>
-          {filteredComplaints.map((complaint) => (
-            <Grid item xs={12} sm={6} md={4} key={complaint.id}>
-              <Card
-  sx={{
-    height: 300,
-    display: 'flex',
-    flexDirection: 'column',
-    justifyContent: 'space-between',
-    bgcolor: 'white', // ✅ Changed from rgba(255,255,255,0.08)
-    color: '#0B3D91',
-    borderRadius: 3,
-    p: 2,
-    transition: 'transform 0.3s ease, box-shadow 0.3s ease',
-    '&:hover': {
-      transform: 'translateY(-6px)',
-      boxShadow: '0 8px 25px rgba(0,0,0,0.12)',
-    },
-  }}
->
-
-                <CardContent sx={{ flexGrow: 1 }}>
-                  <Typography variant="h6" gutterBottom noWrap sx={{ color: '#0B3D91' }}>
-                    {complaint.title}
-                  </Typography>
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      color: '#0B3D91',
-                      mb: 2,
-                      overflow: 'hidden',
-                      display: '-webkit-box',
-                      WebkitLineClamp: 3,
-                      WebkitBoxOrient: 'vertical',
-                    }}
-                  >
-                    {complaint.description}
-                  </Typography>
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                    <Chip
-                      label={complaint.category}
-                      size="small"
-                      sx={{ bgcolor: 'rgba(255,255,255,0.15)', color: '#0B3D91' }}
-                    />
-                    <Chip
-                      label={complaint.priority}
-                      size="small"
-                      sx={{ bgcolor: 'rgba(255,255,255,0.15)', color: '#0B3D91' }}
-                    />
-                    <Chip
-                      icon={getStatusIcon(complaint.status)}
-                      label={complaint.status}
-                      size="small"
-                      sx={{ bgcolor: 'rgba(255,255,255,0.15)', color: '#0B3D91' }}
-                    />
-                  </Box>
-                </CardContent>
-
-                <Box
-                  sx={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    px: 2,
-                    pb: 1,
-                  }}
-                >
-                  <Typography variant="caption" sx={{ color: '#0B3D91' }}>
-  {complaint.studentName} — {complaint.date}
-  <br />
-  Building: {complaint.building}, Floor: {complaint.floor}
-  {complaint.block && `, Block: ${complaint.block}`}
-  {complaint.room && `, Room: ${complaint.room}`}
-</Typography>
-
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-    {userRole === "authority" && (
-      <FormControl size="small" sx={{ minWidth: 120 }}>
-        <InputLabel>Status</InputLabel>
-        <Select
-          value={complaint.status}
-          label="Status"
-          onChange={(e) => handleStatusChange(complaint.id, e.target.value)}
+      
+{/* Complaints List */}
+{filteredComplaints.length === 0 ? (
+  <Alert severity="info" sx={{ mb: 4, borderRadius: 2 }}>
+    No complaints yet. Click the + button above to submit one.
+  </Alert>
+) : (
+  <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+    {filteredComplaints.map((complaint) => (
+      <Box
+        key={complaint.id}
+        sx={{
+          bgcolor: "white",
+          borderRadius: 2,
+          p: 2,
+          boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+          transition: "0.3s",
+          "&:hover": {
+            boxShadow: "0 6px 18px rgba(0,0,0,0.12)",
+          },
+        }}
+      >
+        {/* Top Row: Title + Status */}
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            mb: 1,
+          }}
         >
-          <MenuItem value="pending">Pending</MenuItem>
-          <MenuItem value="in-progress">In Progress</MenuItem>
-          <MenuItem value="resolved">Resolved</MenuItem>
-          <MenuItem value="rejected">Rejected</MenuItem>
-        </Select>
-      </FormControl>
-    )}
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    onClick={() => {
-                      setViewComplaint(complaint);
-                      setViewDialog(true);
-                    }}
-                    sx={{
-                      borderColor: '#0B3D91',
-                      color: '#0B3D91',
-                      textTransform: 'none',
-                      '&:hover': {
-                        borderColor: '#0B3D91',
-                        bgcolor: 'rgba(11,61,145,0.06)',
-                      },
-                    }}
-                  >
-                    View Details
-                  </Button>
-                  </Box>
-                </Box>
-              </Card>
-            </Grid>
-          ))}
-        </Grid>
-      )}
+          <Typography variant="h6" sx={{ color: "#0B3D91" }}>
+            {complaint.title}
+          </Typography>
+
+          <Chip
+            icon={getStatusIcon(complaint.status)}
+            label={complaint.status}
+            size="small"
+            sx={{
+              bgcolor: "rgba(11,61,145,0.08)",
+              color: "#0B3D91",
+            }}
+          />
+        </Box>
+
+        {/* Middle Row: Description */}
+        <Typography
+          variant="body2"
+          sx={{
+            color: "#0B3D91",
+            mb: 1,
+          }}
+        >
+          {complaint.description}
+        </Typography>
+
+        {/* Meta Info Row */}
+        <Box
+          sx={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 1.5,
+            mb: 1,
+          }}
+        >
+          <Chip label={complaint.category} size="small" />
+          <Chip label={`Priority: ${complaint.priority}`} size="small" />
+          <Chip
+            label={`Building: ${complaint.building || "N/A"}, Floor: ${
+              complaint.floor || "N/A"
+            }${complaint.block ? `, Block: ${complaint.block}` : ""}${
+              complaint.room ? `, Room: ${complaint.room}` : ""
+            }`}
+            size="small"
+          />
+        </Box>
+
+        {/* Bottom Row: Student + Actions */}
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            mt: 1,
+          }}
+        >
+          <Typography variant="caption" sx={{ color: "#0B3D91" }}>
+            {complaint.studentName} — {complaint.date}
+          </Typography>
+
+          <Box sx={{ display: "flex", gap: 1 }}>
+            {userRole === "authority" && (
+              <FormControl size="small" sx={{ minWidth: 140 }}>
+                <InputLabel>Status</InputLabel>
+                <Select
+                  value={complaint.status}
+                  label="Status"
+                  onChange={(e) =>
+                    handleStatusChange(complaint.id, e.target.value)
+                  }
+                >
+                  <MenuItem value="pending">Pending</MenuItem>
+                  <MenuItem value="in-progress">In Progress</MenuItem>
+                  <MenuItem value="resolved">Resolved</MenuItem>
+                  <MenuItem value="rejected">Rejected</MenuItem>
+                </Select>
+              </FormControl>
+            )}
+
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={() => {
+                setViewComplaint(complaint);
+                setViewDialog(true);
+              }}
+              sx={{
+                borderColor: "#0B3D91",
+                color: "white",
+                textTransform: "none",
+              }}
+            >
+              View Details
+            </Button>
+          </Box>
+        </Box>
+      </Box>
+    ))}
+  </Box>
+)}
+
 
       {/* Complaint Details Dialog */}
 <Dialog open={viewDialog} onClose={() => setViewDialog(false)} maxWidth="sm" fullWidth>
