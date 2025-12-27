@@ -438,7 +438,7 @@ const HomePage = ({ user }) => {
           <Grid item xs={12} md={8}>
             <Paper
               elevation={0}
-              sx={{ p: 4, borderRadius: 4, bgcolor: 'transparent', boxShadow: 'none' }}
+              sx={{ p: 4, borderRadius: 4, bgcolor: 'rgba(255,255,255,0.15)', boxShadow: 'none' }}
             >
               <Typography
                 variant="h5"

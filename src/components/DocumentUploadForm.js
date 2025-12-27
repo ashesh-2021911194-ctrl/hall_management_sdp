@@ -166,7 +166,26 @@ const useDocumentData = (role, location) => {
     try {
       const data = await ApiFactory.fetchJson(ApiFactory.getApplications());
       // keep server shape (already returned in your backend)
-      setDocuments(data);
+      setDocuments(
+  data.map((d) => ({
+    application_id: d.application_id,
+
+    // 🔥 normalize backend → frontend
+    name: d.student_name,
+    roll_no: d.roll_no,
+    cgpa: d.cgpa,
+    year: d.year,
+    merit_rank: d.merit_rank,
+
+    result_card: d.result_card,
+    hall_card: d.hall_card,
+    status: d.status,
+
+    // keep filters happy
+    hallId: d.hall_id ?? "",
+  }))
+);
+
     } catch (err) {
       console.error("Error fetching applications:", err);
       setError("Failed to load applications");
@@ -446,10 +465,11 @@ const RoleRenderer = {
                 filteredDocuments.map((doc) => (
                   <TableRow key={doc.application_id}>
                     <TableCell>{doc.name}</TableCell>
-                    <TableCell>{doc.roll_no}</TableCell>
-                    <TableCell>{doc.cgpa}</TableCell>
-                    <TableCell>{doc.year}</TableCell>
-                    <TableCell>{doc.merit_rank}</TableCell>
+<TableCell>{doc.roll_no}</TableCell>
+<TableCell>{doc.cgpa}</TableCell>
+<TableCell>{doc.year}</TableCell>
+<TableCell>{doc.merit_rank}</TableCell>
+
 
                     <TableCell>
                       {doc.result_card ? (

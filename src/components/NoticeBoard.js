@@ -602,7 +602,7 @@ const NoticeBoard = ({ user }) => {
             alignItems: 'center',
             gap: 2,
             p: 2,
-            bgcolor: 'white',
+            //bgcolor: 'white',
             cursor: 'pointer',
             '&:hover': { boxShadow: 3 },
           }}
@@ -631,14 +631,37 @@ const NoticeBoard = ({ user }) => {
               </Box>
             )}
             {notice.requiresDocument && (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Typography variant="body2" color="text.secondary">Required Document Upload:</Typography>
-                <Button size="small" variant="outlined" component="label" startIcon={<AttachFileIcon />}>
-                  Upload
-                  <input type="file" hidden onChange={(e) => handleUpload(notice.id, e.target.files[0])} />
-                </Button>
-              </Box>
-            )}
+  <Box sx={{ mt: 1 }}>
+    {/* Show what the authority wants */}
+    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+      Required Document:Read
+    </Typography>
+    <Typography variant="body2">{notice.documentTitle}</Typography>
+    {notice.documentDescription && (
+      <Typography variant="caption" color="text.secondary">
+        {notice.documentDescription}
+      </Typography>
+    )}
+
+    {/* Upload button */}
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
+      <Button
+        size="small"
+        variant="outlined"
+        component="label"
+        startIcon={<AttachFileIcon />}
+      >
+        Upload
+        <input
+          type="file"
+          hidden
+          onChange={(e) => handleUpload(notice.id, e.target.files[0])}
+        />
+      </Button>
+    </Box>
+  </Box>
+)}
+
           </Box>
         </Paper>
             ) : (
@@ -649,7 +672,7 @@ const NoticeBoard = ({ user }) => {
       transform: 'translateY(-4px)',
       boxShadow: theme.shadows[4],
     },
-    bgcolor: 'white',
+    //bgcolor: 'white',
     height: 280, // fixed height
     width: '100%', // consistent width
     maxWidth: 360, // 🔹 optional: fixed width for squarish look

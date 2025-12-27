@@ -110,6 +110,8 @@ const SeatAllocationSection = ({ user }) => {
   const [buildingFilter, setBuildingFilter] = useState("");
   const [floor, setFloor] = useState(3);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [facultyFilter, setFacultyFilter] = useState("");
+  const [departmentFilter, setDepartmentFilter] = useState("");
 
   // =====================================================
   // [Strategy Pattern]
@@ -139,21 +141,70 @@ const SeatAllocationSection = ({ user }) => {
   (s) =>
     (s.name.toLowerCase().includes(search.toLowerCase()) ||
      s.roll_no.toLowerCase().includes(search.toLowerCase()) ||
-     (s.faculty?.toLowerCase().includes(search.toLowerCase())) ||   // <-- ADD
-     (s.department?.toLowerCase().includes(search.toLowerCase()))) && // <-- ADD
+     s.faculty?.toLowerCase().includes(search.toLowerCase()) ||
+     s.department?.toLowerCase().includes(search.toLowerCase())) &&
+
     (yearFilter ? s.year === parseInt(yearFilter) : true) &&
-    (buildingFilter ? s.building_name === buildingFilter : true)
+    (buildingFilter ? s.building_name === buildingFilter : true) &&
+
+    // ✅ ADD THESE TWO LINES
+    (facultyFilter ? s.faculty === facultyFilter : true) &&
+    (departmentFilter ? s.department === departmentFilter : true)
 );
+
 
 const filteredWaiting = waiting.filter(
   (s) =>
     (s.name.toLowerCase().includes(search.toLowerCase()) ||
      s.roll_no.toLowerCase().includes(search.toLowerCase()) ||
-     (s.faculty?.toLowerCase().includes(search.toLowerCase())) ||   // <-- ADD
-     (s.department?.toLowerCase().includes(search.toLowerCase()))) && // <-- ADD
-    (yearFilter ? s.year === parseInt(yearFilter) : true)
+     s.faculty?.toLowerCase().includes(search.toLowerCase()) ||
+     s.department?.toLowerCase().includes(search.toLowerCase())) &&
+
+    (yearFilter ? s.year === parseInt(yearFilter) : true) &&
+
+    // ✅ ADD THESE TWO LINES
+    (facultyFilter ? s.faculty === facultyFilter : true) &&
+    (departmentFilter ? s.department === departmentFilter : true)
 );
 
+
+const FACULTY_DEPARTMENT_MAP = {
+  
+  "Faculty of Engineering": [
+    "Computer Science & Engineering",
+    "Electrical Engineering",
+    "Mechanical Engineering",
+    "Civil Engineering",
+    "Electronics Engineering",
+    "Chemical Engineering",
+    "Nuclear Engineering",
+    "Electrical and Electronic Engineering",
+  ],
+
+  "Faculty of Science": [
+    "Physics",
+    "Chemistry",
+    "Mathematics",
+    "Biology",
+  ],
+
+  "Faculty of Arts": [
+    "English Literature",
+    "History",
+    "Bengali Language",
+    "Philosophy",
+    "Sociology",
+    "Islamic Studies",
+  ],
+
+  "Faculty of Business": [
+    "Accounting",
+    "Finance",
+    "Management",
+    "Economics",
+    "Marketing",
+  ],
+};
 
     // =====================================================
     // [Command Pattern]
@@ -199,13 +250,26 @@ const filteredWaiting = waiting.filter(
       p: 4,
     }}
   >
-    <Typography
-      variant="h4"
-      align="center"
-      sx={{ mb: 4, fontWeight: "bold", color: "primary.main" }}
-    >
-      🏛️ Authority: Student List
-    </Typography>
+    <Box
+  sx={{
+    bgcolor: "white",
+    borderRadius: 2,
+    px: 2,
+    py: 3, // 👈 increases height
+    mb: 4,
+    boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+  }}
+>
+  <Typography
+    variant="h4"
+    align="center"
+    sx={{ fontWeight: "bold", color: "primary.main" }}
+  >
+    🏛️ Authority: Student List
+  </Typography>
+</Box>
+
+
 
     {/* Tabs */}
     <Box
@@ -214,7 +278,7 @@ const filteredWaiting = waiting.filter(
         justifyContent: "center",
         mb: 3,
         borderRadius: 2,
-        bgcolor: "rgba(255, 255, 255, 1)",
+        bgcolor: "rgba(255, 255, 255, 0.75)",
       }}
     >
       <Tabs
@@ -257,7 +321,7 @@ const filteredWaiting = waiting.filter(
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           sx={{
-        bgcolor: "white",
+        bgcolor: "rgba(255, 255, 255, 0.75)",
         borderRadius: 1,
         "& .MuiInputBase-input": {
           color: "primary.main",
@@ -288,7 +352,7 @@ const filteredWaiting = waiting.filter(
             label="Year"
             onChange={(e) => setYearFilter(e.target.value)}
             sx={{
-              bgcolor: "white",
+              bgcolor: "rgba(255, 255, 255, 0.75)",
               color: "primary.main",
               minWidth: 150,
               "& .MuiOutlinedInput-notchedOutline": { borderColor: "#ffffffff" },
@@ -312,7 +376,7 @@ const filteredWaiting = waiting.filter(
               label="Building"
               onChange={(e) => setBuildingFilter(e.target.value)}
               sx={{
-                bgcolor: "white",
+                bgcolor: "rgba(255, 255, 255, 0.75)",
               color: "primary.main",
                 minWidth: 150,
                 "& .MuiOutlinedInput-notchedOutline": { borderColor: "#ffffffff" },
@@ -326,12 +390,66 @@ const filteredWaiting = waiting.filter(
           </FormControl>
         </Grid>
       )}
-    </Grid>
+    
+    
+    <Grid item xs={12} sm={6} md={4}>
+  <FormControl fullWidth>
+    <InputLabel>Faculty</InputLabel>
+    <Select
+      value={facultyFilter}
+      label="Faculty"
+      onChange={(e) => {
+        setFacultyFilter(e.target.value);
+        setDepartmentFilter("");
+      }}
+      sx={{
+    bgcolor: "rgba(255,255,255,0.75)",
+    minWidth: 150,
+    minHeight: 56,              // ✅ FIX
+    display: "flex",
+    alignItems: "center",
+  }}
+    >
+      <MenuItem value="">All Faculties</MenuItem>
+      {Object.keys(FACULTY_DEPARTMENT_MAP).map((faculty) => (
+        <MenuItem key={faculty} value={faculty}>
+          {faculty}
+        </MenuItem>
+      ))}
+    </Select>
+  </FormControl>
+</Grid>
 
+<Grid item xs={12} sm={6} md={4}>
+  <FormControl fullWidth disabled={!facultyFilter}>
+    <InputLabel>Department</InputLabel>
+    <Select
+      value={departmentFilter}
+      label="Department"
+      onChange={(e) => setDepartmentFilter(e.target.value)}
+      sx={{
+    bgcolor: "rgba(255,255,255,0.75)",
+    minWidth: 150,
+    minHeight: 56,              // ✅ FIX
+    display: "flex",
+    alignItems: "center",
+  }}
+    >
+      <MenuItem value="">All Departments</MenuItem>
+      {facultyFilter &&
+        FACULTY_DEPARTMENT_MAP[facultyFilter].map((dept) => (
+          <MenuItem key={dept} value={dept}>
+            {dept}
+          </MenuItem>
+        ))}
+    </Select>
+  </FormControl>
+</Grid>
+</Grid>
     {/* Floor Chart */}
 <Card
   sx={{
-    bgcolor: "rgba(255, 255, 255, 1)",
+    bgcolor: "rgba(255, 255, 255, 0.75)",
     borderRadius: 3,
     p: 2,
     mb: 4,
@@ -378,7 +496,7 @@ const filteredWaiting = waiting.filter(
       <TableContainer
         component={Paper}
         sx={{
-          bgcolor: "rgba(255, 255, 255, 1)",
+          bgcolor: "rgba(255, 255, 255, 0.75)",
           borderRadius: 3,
           boxShadow: "0 0 20px rgba(0,0,0,0.3)",
         }}
@@ -446,7 +564,7 @@ const filteredWaiting = waiting.filter(
       <TableContainer
         component={Paper}
         sx={{
-          bgcolor: "rgba(255, 255, 255, 1)",
+          bgcolor: "rgba(255, 255, 255, 0.75)",
           borderRadius: 3,
           boxShadow: "0 0 20px rgba(0,0,0,0.3)",
         }}

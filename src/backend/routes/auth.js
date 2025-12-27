@@ -21,12 +21,25 @@ class AuthRepository {
     );
   }
 
-  static async createStudent({ name, roll_no, email, password, present_address }) {
+  static async createStudent({ name, roll_no, email, password, present_address, cgpa,
+  year,
+  merit_rank, faculty, department }) {
   return pool.query(
-    `INSERT INTO all_students(name, roll_no, email, password, present_address)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO all_students
+     (name, roll_no, email, password, present_address, cgpa, year, merit_rank, faculty, department)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
      RETURNING *`,
-    [name, roll_no, email, password, present_address]
+    [
+      name,
+      roll_no,
+      email,
+      password,
+      present_address,
+      cgpa,
+      year,
+      merit_rank,
+      faculty, department
+    ]
   );
 }
 
@@ -127,7 +140,9 @@ router.post("/login", async (req, res) => {
 });
 
 router.post("/signup", async (req, res) => {
-  const { email, password, name, present_address } = req.body;
+  const { email, password, name, present_address, cgpa, year, merit_rank, faculty,
+  department } = req.body;
+
 
   try {
     // Check email format
@@ -154,6 +169,10 @@ router.post("/signup", async (req, res) => {
       email,
       password,
       present_address: present_address || null,
+      cgpa: cgpa || null,
+  year: year || null,
+  merit_rank: merit_rank || null,faculty,
+  department
     });
 
     res.status(201).json({

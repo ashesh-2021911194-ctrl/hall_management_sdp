@@ -9,6 +9,7 @@ import {
   IconButton,
   List,
   Chip,
+  Divider,
   Button,
   Dialog,
   DialogActions,
@@ -41,6 +42,7 @@ const ApiFactory = {
     console.log("🏭 ApiFactory: Returning endpoint for 'getMenu'");
     return "http://localhost:5000/api/authority/canteen-menu";
   },
+  getReviews: (itemId) => `http://localhost:5000/api/admin/students/canteen-menu/${itemId}/reviews`,
   addItem: () => {
     console.log("🏭 ApiFactory: Returning endpoint for 'addItem'");
     return "http://localhost:5000/api/authority/canteen-menu";
@@ -61,7 +63,7 @@ const ApiFactory = {
    MenuFormatter defines strategies to process API data.
    Easy to plug in different parsing logic later (e.g., currency, rating styles)
 ============================================ */
-const MenuFormatter = {
+/*const MenuFormatter = {
   defaultFormat: (item) => ({
     ...item,
     rating: item.rating ? parseFloat(item.rating) : 0,
@@ -69,13 +71,30 @@ const MenuFormatter = {
       item.price !== undefined && item.price !== null
         ? parseFloat(item.price)
         : 0,
-    reviews: Array.isArray(item.reviews) ? item.reviews : [],
+    reviews: Array.isArray(item.reviews) ? item.reviews : [], // to hold detailed reviews
     // normalize snake_case from backend to camelCase used in UI
     mealType: item.mealType || item.meal_type || "",
     foodType: item.foodType || item.food_type || "",
     preparationTime: item.preparationTime || item.preparation_time || "",
   }),
+};*/
+const MenuFormatter = {
+  defaultFormat: (item) => ({
+    ...item,
+
+    rating: item.average_rating ? parseFloat(item.average_rating) : 0,
+    price: item.price !== undefined ? parseFloat(item.price) : 0,
+
+    // ⬇️ IMPORTANT
+    reviewCount: Number(item.review_count) || 0,
+    reviews: [], // details fetched only on click
+
+    mealType: item.mealType || item.meal_type || "",
+    foodType: item.foodType || item.food_type || "",
+    preparationTime: item.preparationTime || item.preparation_time || "",
+  }),
 };
+
 
 /* ============================================
    🧩 [Template Method Pattern]
@@ -186,6 +205,31 @@ const MenuCommand = {
   },
 };
 
+const useReviews = (itemId) => {
+  const [reviews, setReviews] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const fetchReviews = useCallback(async () => {
+    if (!itemId) return;
+    try {
+      const res = await fetch(ApiFactory.getReviews(itemId));
+      const data = await res.json();
+      setReviews(data); // backend returns an array of reviews
+    } catch (err) {
+      setError("Failed to fetch reviews");
+    } finally {
+      setLoading(false);
+    }
+  }, [itemId]);
+
+  useEffect(() => {
+    fetchReviews();
+  }, [fetchReviews]);
+
+  return { reviews, loading, error, fetchReviews };
+};
+
 /* ============================================
    🎨 Component: CanteenSection
 ============================================ */
@@ -206,6 +250,10 @@ const CanteenSection = ({ user }) => {
   available: true,
   preparationTime: "",
 });
+  const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
+const [currentItemReviews, setCurrentItemReviews] = useState([]);
+const [currentItemName, setCurrentItemName] = useState("");
+
 
   
 
@@ -238,6 +286,31 @@ const CanteenSection = ({ user }) => {
       preparationTime: "",
     });
   };
+
+  const handleViewReviews = async (item) => {
+  try {
+    const res = await fetch(ApiFactory.getReviews(item.item_id));
+    const data = await res.json();
+
+    setCurrentItemReviews(data); // reviews for the clicked item
+    setCurrentItemName(item.name); // item name for dialog title
+    setReviewDialogOpen(true); // open the dialog
+
+    // Also update the menu state if you want to store reviews globally
+    setMenu((prevMenu) =>
+  prevMenu.map((m) =>
+    m.item_id === item.item_id
+      ? { ...m, reviews: data, reviewCount: data.length }
+      : m
+  )
+);
+
+  } catch (err) {
+    setError("Failed to load reviews");
+  }
+};
+
+
 
   const filteredMenu = menu.filter((item) => {
     
@@ -444,6 +517,19 @@ const CanteenSection = ({ user }) => {
                           )}
                         </Box>
                       </Box>
+                      <Button
+  size="small"
+  variant="outlined"
+  onClick={() => handleViewReviews(item)}
+>
+  View Reviews ({item.reviewCount})
+
+</Button>
+
+
+
+
+
                       <Box sx={{ display: "flex", gap: 1 }}>
                         <Button
                           size="small"
@@ -494,6 +580,31 @@ const CanteenSection = ({ user }) => {
                 </Card>
               ))}
             </List>
+            <Dialog
+  open={reviewDialogOpen}
+  onClose={() => setReviewDialogOpen(false)}
+  fullWidth
+  maxWidth="sm"
+>
+  <DialogTitle>Reviews for {currentItemName}</DialogTitle>
+  <DialogContent dividers>
+    {currentItemReviews.length === 0 ? (
+      <Typography>No reviews yet.</Typography>
+    ) : (
+      currentItemReviews.map((rev) => (
+        <Box key={rev.review_id} sx={{ mb: 2 }}>
+          <Typography variant="subtitle2">{rev.user_name}</Typography>
+          <Typography variant="body2">Rating: {rev.rating}</Typography>
+          <Typography variant="body2">{rev.comment}</Typography>
+          <Divider sx={{ my: 1 }} />
+        </Box>
+      ))
+    )}
+  </DialogContent>
+  <DialogActions>
+    <Button onClick={() => setReviewDialogOpen(false)}>Close</Button>
+  </DialogActions>
+</Dialog>
 
             {/* Add/Edit Dialog */}
             <Dialog

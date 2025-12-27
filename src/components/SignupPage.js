@@ -17,6 +17,12 @@ const SignupPage = () => {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [name, setName] = useState("");
   const [presentAddress, setPresentAddress] = useState("");
+  const [cgpa, setCgpa] = useState("");
+  const [year, setYear] = useState("");
+  const [meritRank, setMeritRank] = useState("");
+  const [faculty, setFaculty] = useState("");
+  const [department, setDepartment] = useState("");
+
   const navigate = useNavigate();
 
   const handleSignup = async (e) => {
@@ -31,7 +37,10 @@ const SignupPage = () => {
       const res = await fetch("http://localhost:5000/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, name, present_address: presentAddress }),
+        body: JSON.stringify({ email, password, name, present_address: presentAddress, cgpa: cgpa || null,
+  year: year || null,
+  merit_rank: meritRank || null,faculty,
+  department, }),
       });
 
       const data = await res.json();
@@ -81,6 +90,54 @@ const SignupPage = () => {
               onChange={(e) => setPresentAddress(e.target.value)}
               required
             />
+
+            <TextField
+  label="CGPA"
+  type="number"
+  inputProps={{ step: "0.01", min: 0, max: 4 }}
+  fullWidth
+  margin="normal"
+  value={cgpa}
+  onChange={(e) => setCgpa(e.target.value)}
+/>
+
+<TextField
+  label="Year"
+  type="number"
+  fullWidth
+  margin="normal"
+  value={year}
+  onChange={(e) => setYear(e.target.value)}
+/>
+
+<TextField
+  label="Merit Rank"
+  type="number"
+  fullWidth
+  margin="normal"
+  value={meritRank}
+  onChange={(e) => setMeritRank(e.target.value)}
+/>
+
+<TextField
+  label="Faculty"
+  fullWidth
+  margin="normal"
+  value={faculty}
+  onChange={(e) => setFaculty(e.target.value)}
+  required
+/>
+
+<TextField
+  label="Department"
+  fullWidth
+  margin="normal"
+  value={department}
+  onChange={(e) => setDepartment(e.target.value)}
+  required
+/>
+
+
 
           <TextField
             type="password"

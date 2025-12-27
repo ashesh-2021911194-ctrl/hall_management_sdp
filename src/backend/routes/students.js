@@ -23,16 +23,43 @@ const upload = multer({ storage });
 router.get("/allocated", async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT s.student_id, s.name, s.roll_no, s.cgpa, s.year, s.score,
-       s.faculty, s.department,
-       a.expiry_date, r.room_number, f.floor_number, b.building_name
+      SELECT 
+    s.student_id,
+    s.name,
+    s.roll_no,
+    s.cgpa,
+    s.year,
+    s.score,
+
+    /* fallback logic */
+    COALESCE(s.faculty, als.faculty)     AS faculty,
+    COALESCE(s.department, als.department) AS department,
+
+    a.expiry_date,
+    r.room_number,
+    f.floor_number,
+    b.building_name
+
 FROM allocations a
-JOIN students s ON a.student_id = s.student_id
-JOIN rooms r ON a.room_id = r.room_id
-JOIN floors f ON r.floor_id = f.floor_id
-JOIN buildings b ON f.building_id = b.building_id
+JOIN students s 
+    ON a.student_id = s.student_id
+
+LEFT JOIN all_students als
+    ON als.roll_no = s.roll_no   -- safest common key
+
+JOIN rooms r 
+    ON a.room_id = r.room_id
+JOIN floors f 
+    ON r.floor_id = f.floor_id
+JOIN buildings b 
+    ON f.building_id = b.building_id
+
 WHERE a.active = TRUE
-ORDER BY b.building_name, f.floor_number DESC, r.room_number ASC
+ORDER BY 
+    b.building_name,
+    f.floor_number DESC,
+    r.room_number ASC;
+
     `);
     res.json(result.rows);
   } catch (err) {
@@ -45,12 +72,25 @@ ORDER BY b.building_name, f.floor_number DESC, r.room_number ASC
 router.get("/waiting", async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT w.student_id, s.name, s.roll_no, s.cgpa, s.year, s.score,
-       s.faculty, s.department,
-       w.added_on
+      SELECT
+    w.student_id,
+    s.name,
+    s.roll_no,
+    s.cgpa,
+    s.year,
+    s.score,
+
+    COALESCE(s.faculty, a.faculty)     AS faculty,
+    COALESCE(s.department, a.department) AS department,
+
+    w.added_on
 FROM waiting_list w
-JOIN students s ON w.student_id = s.student_id
-ORDER BY s.score DESC, w.added_on ASC
+JOIN students s
+    ON w.student_id = s.student_id
+LEFT JOIN all_students a
+    ON s.roll_no = a.roll_no
+ORDER BY s.score DESC, w.added_on ASC;
+
     `);
     res.json(result.rows);
   } catch (err) {
@@ -1015,14 +1055,18 @@ router.post("/complaints", async (req, res) => {
     const result = await ComplaintService.create(pool, req.body);
     res.status(201).json(result.rows[0]);
   } catch (err) {
+    // handle unique constraint violation
     if (err.code === "23505") {
       return res.status(409).json({
         error: "This complaint already exists and is being processed.",
       });
     }
+
+    // handle service errors
     res.status(err.status || 500).json({ error: err.message || "DB error" });
   }
 });
+
 
 // GET complaints (student)
 router.get("/complaints/:allStudentId", async (req, res) => {

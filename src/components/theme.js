@@ -43,7 +43,8 @@ const theme = createTheme({
   components: {
     MuiCssBaseline: {
   styleOverrides: `
-    body {
+    html {
+      min-height: 100%;
       background: linear-gradient(
         180deg,
         #bfdbfe 0%,
@@ -52,10 +53,34 @@ const theme = createTheme({
         #ffffff 100%
       );
       background-attachment: fixed;
-      background-size: cover;
+    }
+
+    body {
+      position: relative;
+      min-height: 100vh;
+      background: transparent;
+      z-index: 0;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+
+      background-image: url("/assets/19697.jpg");
+      background-repeat: no-repeat;
+      background-position: center;
+      background-size: 1440px 980px;
+
+      opacity: 0.05;   /* slightly higher for visibility */
+      pointer-events: none;
+
+      z-index: 0;
     }
   `,
 },
+
+
 
 
     MuiPaper: {

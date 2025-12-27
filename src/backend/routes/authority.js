@@ -16,18 +16,31 @@ const storage = multer.diskStorage({
   },
 });
 
-router.get("/applications", async (req, res) => {
+/*router.get("/applications", async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT 
-        a.application_id, a.student_id, s.name AS student_name, s.roll_no, s.cgpa, s.year, s.merit_rank,
-        a.result_card, a.hall_card,
-        a.result_name, a.result_roll_no, a.result_cgpa, a.result_year, a.result_session,
-        a.status, a.submitted_at
-      FROM seat_applications a
-      JOIN all_students s ON a.student_id = s.all_student_id
-      WHERE a.status = 'Pending'
-      ORDER BY a.submitted_at ASC
+  a.application_id,
+  a.student_id,
+  s.name AS student_name,
+  s.roll_no,
+
+  a.result_cgpa AS cgpa,
+  a.result_year AS year,
+  s.merit_rank  AS merit_rank,
+
+  a.result_card,
+  a.hall_card,
+  a.result_name,
+  a.result_roll_no,
+  a.result_session,
+  a.status,
+  a.submitted_at
+FROM seat_applications a
+JOIN all_students s ON a.student_id = s.all_student_id
+WHERE a.status = 'Pending'
+ORDER BY a.submitted_at ASC;
+
     `);
 
     const applications = result.rows.map((app) => ({
@@ -90,21 +103,6 @@ function getAddressWeight(address) {
   return 1; // highest
 }
 
-/*let score = 0;
-
-if (year === 1 && meritRank > 0) {
-  // 1st year → based on merit
-  const meritScore = (1 / meritRank) * 100; // normalize merit
-  score = (year * 25) + (meritScore * 25);
-} else {
-  // 2nd–4th years → based on CGPA + year
-  const cgpaScore = (cgpa / 4.0) * 50; // normalize CGPA (max 50)
-  const yearScore = (year / 4.0) * 50; // normalize year (max 50)
-  score = cgpaScore + yearScore;
-}
-
-score = Math.round(score * 100) / 100; // round to 2 decimal places
-*/
 let score = 0;
 
 const maxWeight = 33.33;   // each factor gets equal weight
@@ -303,6 +301,325 @@ router.post("/applications/:applicationId/reject", async (req, res) => {
     res.status(500).json({ error: "Database error" });
   } finally {
     client.release();
+  }
+});*/
+
+
+/* =========================================================
+   🗄️ REPOSITORY PATTERN — ApplicationsRepo
+   ========================================================= */
+const ApplicationsRepo = {
+  async getPending() {
+    return pool.query(`
+      SELECT 
+        a.application_id,
+        a.student_id,
+        s.name AS student_name,
+        s.roll_no,
+        a.result_cgpa AS cgpa,
+        a.result_year AS year,
+        s.merit_rank,
+        a.result_card,
+        a.hall_card,
+        a.result_name,
+        a.result_roll_no,
+        a.result_session,
+        a.status,
+        a.submitted_at
+      FROM seat_applications a
+      JOIN all_students s ON a.student_id = s.all_student_id
+      WHERE a.status = 'Pending'
+      ORDER BY a.submitted_at ASC
+    `);
+  },
+
+  async getPendingById(client, applicationId) {
+    return client.query(`
+      SELECT a.application_id,
+             a.student_id AS all_student_id,
+             s.name,
+             s.roll_no,
+             s.cgpa,
+             s.year,
+             s.merit_rank,
+             s.present_address
+      FROM seat_applications a
+      JOIN all_students s ON a.student_id = s.all_student_id
+      WHERE a.application_id = $1 AND a.status = 'Pending'
+    `, [applicationId]);
+  },
+
+  async getById(client, applicationId) {
+    return client.query(`
+      SELECT student_id AS all_student_id
+      FROM seat_applications
+      WHERE application_id = $1
+    `, [applicationId]);
+  },
+
+  async updateStatus(client, applicationId, status) {
+    return client.query(
+      `UPDATE seat_applications SET status = $1 WHERE application_id = $2`,
+      [status, applicationId]
+    );
+  }
+};
+
+/* =========================================================
+   🗄️ REPOSITORY PATTERN — StudentsRepo
+   ========================================================= */
+const StudentsRepo = {
+  async findByRoll(client, rollNo) {
+    return client.query(
+      `SELECT student_id FROM students WHERE roll_no = $1`,
+      [rollNo]
+    );
+  },
+
+  async update(client, studentId, student, score) {
+    return client.query(`
+      UPDATE students
+      SET cgpa = $1, year = $2, merit_rank = $3, score = $4
+      WHERE student_id = $5
+    `, [student.cgpa, student.year, student.merit_rank, score, studentId]);
+  },
+
+  async insert(client, student, score) {
+    return client.query(`
+      INSERT INTO students (name, roll_no, cgpa, year, merit_rank, score)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING student_id
+    `, [
+      student.name,
+      student.roll_no,
+      student.cgpa,
+      student.year,
+      student.merit_rank,
+      score
+    ]);
+  }
+};
+
+/* =========================================================
+   🗄️ REPOSITORY PATTERN — RoomsRepo
+   ========================================================= */
+const RoomsRepo = {
+  async findFreeRoom(client) {
+    return client.query(`
+      SELECT r.room_id,
+             r.room_number,
+             r.capacity,
+             r.current_occupancy,
+             f.floor_number,
+             b.building_name
+      FROM rooms r
+      JOIN floors f ON r.floor_id = f.floor_id
+      JOIN buildings b ON f.building_id = b.building_id
+      WHERE r.current_occupancy < r.capacity
+      ORDER BY
+        CASE b.building_name
+          WHEN 'Main Building' THEN 1
+          WHEN 'Extension 1' THEN 2
+          WHEN 'Extension 2' THEN 3
+          ELSE 4
+        END,
+        f.floor_number DESC,
+        r.room_number ASC
+      LIMIT 1
+    `);
+  },
+
+  async incrementOccupancy(client, roomId) {
+    return client.query(
+      `UPDATE rooms SET current_occupancy = current_occupancy + 1 WHERE room_id = $1`,
+      [roomId]
+    );
+  }
+};
+
+/* =========================================================
+   🗄️ REPOSITORY PATTERN — NotificationsRepo (Facade)
+   ========================================================= */
+const NotificationsRepo = {
+  async insert(client, allStudentId, type, message, link) {
+    return client.query(`
+      INSERT INTO notifications (all_student_id, type, message, link)
+      VALUES ($1, $2, $3, $4)
+    `, [allStudentId, type, message, link]);
+  }
+};
+
+/* =========================================================
+   🧠 STRATEGY PATTERN — SeatScoreCalculator
+   ========================================================= */
+const SeatScoreCalculator = {
+  calculate(student) {
+    const year = parseInt(student.year);
+    const cgpa = parseFloat(student.cgpa);
+    const meritRank = parseFloat(student.merit_rank);
+
+    const maxWeight = 25.00;
+    const maxMeritRank = 2000;
+
+    const yearScore = (year / 4) * maxWeight;
+
+    const academicScore =
+      year === 1 && meritRank > 0
+        ? ((maxMeritRank - meritRank + 1) / maxMeritRank) * maxWeight
+        : (cgpa / 4) * maxWeight;
+
+    const address = student.present_address?.toLowerCase() || "";
+    const addressScore =
+      address.includes("dhaka") ? 0 :
+      ["gazipur", "narayanganj", "munshiganj"].some(d => address.includes(d))
+        ? 0.5 * 50.00
+        : 50.00;
+
+    return Math.round((yearScore + academicScore + addressScore) * 100) / 100;
+  }
+};
+
+/* =========================================================
+   🧩 SERVICE LAYER — SeatApprovalService
+   ========================================================= */
+const SeatApprovalService = {
+  async approve(applicationId) {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      const appRes = await ApplicationsRepo.getPendingById(client, applicationId);
+      if (!appRes.rows.length) throw new Error("Application not found");
+
+      const student = appRes.rows[0];
+      const score = SeatScoreCalculator.calculate(student);
+
+      const existing = await StudentsRepo.findByRoll(client, student.roll_no);
+      let studentId;
+
+      if (existing.rows.length) {
+        studentId = existing.rows[0].student_id;
+        await StudentsRepo.update(client, studentId, student, score);
+      } else {
+        const ins = await StudentsRepo.insert(client, student, score);
+        studentId = ins.rows[0].student_id;
+      }
+
+      const roomRes = await RoomsRepo.findFreeRoom(client);
+
+      if (roomRes.rows.length) {
+        const room = roomRes.rows[0];
+
+        await client.query(`
+          INSERT INTO allocations (student_id, room_id, score, expiry_date, active)
+          VALUES ($1, $2, $3, NOW() + interval '4 years', TRUE)
+        `, [studentId, room.room_id, score]);
+
+        await RoomsRepo.incrementOccupancy(client, room.room_id);
+        await ApplicationsRepo.updateStatus(client, applicationId, "Approved");
+
+        await NotificationsRepo.insert(
+          client,
+          student.all_student_id,
+          "seat_approval",
+          `Your seat has been allocated in ${room.building_name}, Floor ${room.floor_number}, Room ${room.room_number}.`,
+          "/seat-allocation"
+        );
+      } else {
+        await client.query(`
+          INSERT INTO waiting_list (student_id, score, added_on)
+          VALUES ($1, $2, NOW())
+        `, [studentId, score]);
+
+        await ApplicationsRepo.updateStatus(client, applicationId, "Approved");
+
+        await NotificationsRepo.insert(
+          client,
+          student.all_student_id,
+          "waiting_list",
+          "No seat was available. You have been added to the waiting list.",
+          "/seat-allocation"
+        );
+      }
+
+      await client.query("COMMIT");
+      return { message: "Application approved successfully" };
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+};
+
+/* =========================================================
+   🧩 SERVICE LAYER — SeatRejectionService
+   ========================================================= */
+const SeatRejectionService = {
+  async reject(applicationId) {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      const appRes = await ApplicationsRepo.getById(client, applicationId);
+      if (!appRes.rows.length) throw new Error("Application not found");
+
+      const { all_student_id } = appRes.rows[0];
+
+      await ApplicationsRepo.updateStatus(client, applicationId, "Rejected");
+
+      await NotificationsRepo.insert(
+        client,
+        all_student_id,
+        "seat_rejection",
+        "Your seat application has been rejected by the authority.",
+        "/seat-allocation"
+      );
+
+      await client.query("COMMIT");
+      return { message: "Application rejected successfully" };
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+};
+
+/* =========================================================
+   🚏 ROUTES — Thin Controllers
+   ========================================================= */
+
+router.get("/applications", async (req, res) => {
+  try {
+    const result = await ApplicationsRepo.getPending();
+    res.json(result.rows.map(a => ({
+      ...a,
+      result_card: a.result_card ? `/uploads/${path.basename(a.result_card)}` : null,
+      hall_card: a.hall_card ? `/uploads/${path.basename(a.hall_card)}` : null
+    })));
+  } catch {
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+router.post("/applications/:applicationId/approve", async (req, res) => {
+  try {
+    const result = await SeatApprovalService.approve(req.params.applicationId);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post("/applications/:applicationId/reject", async (req, res) => {
+  try {
+    const result = await SeatRejectionService.reject(req.params.applicationId);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 

@@ -138,7 +138,7 @@ const LoginPage = ({ setUser }) => {
             flexDirection: "column",
             alignItems: "center",
             borderRadius: "20px",
-            backgroundColor: "rgba(255,255,255,0.95)",
+            backgroundColor: "rgba(255,255,255,0.25)",
             width: "100%",
           }}
         >

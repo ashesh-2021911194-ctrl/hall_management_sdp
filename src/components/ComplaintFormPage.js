@@ -691,7 +691,7 @@ const handleSubmitReply = async () => {
           display: 'flex',
           alignItems: 'center',
           mb: 4,
-          bgcolor: 'white',
+          //bgcolor: 'white',
           borderRadius: 2,
         }}
       >
@@ -707,182 +707,213 @@ const handleSubmitReply = async () => {
       </Paper>
 
       
-{/* Complaints List */}
-{filteredComplaints.length === 0 ? (
-  <Alert severity="info" sx={{ mb: 4, borderRadius: 2 }}>
-    No complaints yet. Click the + button above to submit one.
-  </Alert>
-) : (
-  <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-    {filteredComplaints.map((complaint) => (
+<Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+  {filteredComplaints.map((complaint) => (
+    <Box
+      key={complaint.id}
+      sx={{
+        bgcolor: "rgba(255, 255, 255, 0.75)",
+        borderRadius: 2,
+        p: 2,
+        boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+        transition: "0.3s",
+        "&:hover": {
+          boxShadow: "0 6px 18px rgba(0,0,0,0.12)",
+        },
+      }}
+    >
       <Box
-        key={complaint.id}
         sx={{
-          bgcolor: "white",
-          borderRadius: 2,
-          p: 2,
-          boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
-          transition: "0.3s",
-          "&:hover": {
-            boxShadow: "0 6px 18px rgba(0,0,0,0.12)",
-          },
+          display: "flex",
+          gap: 2,
+          flexDirection: { xs: "column", md: "row" },
         }}
       >
-        {/* Top Row: Title + Status */}
         <Box
-          sx={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            mb: 1,
-          }}
+  sx={{
+    display: "flex",
+    alignItems: "center",
+    gap: 1,              // tighter spacing
+    flexWrap: "nowrap",  // keep everything on one line (desktop)
+    overflow: "hidden",
+  }}
+>
+  {/* TITLE */}
+  <Typography
+    sx={{
+      fontWeight: 600,
+      color: "#031533ff",
+      width: 180,
+      flexShrink: 0,
+    }}
+  >
+    {complaint.title}
+  </Typography>
+
+  {/* DESCRIPTION */}
+  <Typography
+    sx={{
+      color: "#0B3D91",
+      width: 260,
+      whiteSpace: "nowrap",
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      flexShrink: 0,
+    }}
+  >
+    {complaint.description}
+  </Typography>
+
+  {/* CATEGORY */}
+  <Chip
+    label={complaint.category}
+    size="small"
+    sx={{ flexShrink: 0 }}
+  />
+
+  {/* SUBMITTED BY */}
+  <Typography
+    sx={{
+      width: 140,
+      flexShrink: 0,
+    }}
+  >
+    {complaint.studentName}
+  </Typography>
+
+  {/* DATE */}
+  <Typography
+    variant="caption"
+    sx={{
+      color: "#0B3D91",
+      width: 90,
+      flexShrink: 0,
+    }}
+  >
+    {complaint.date}
+  </Typography>
+</Box>
+
+
+        {/* RIGHT SIDE */}
+<Box
+  sx={{
+    flex: 1,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between", // pushes button to right
+    gap: 1,
+  }}
+>
+  {/* STATUS SECTION */}
+  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+    <Chip
+      icon={getStatusIcon(complaint.status)}
+      label={complaint.status}
+      size="small"
+      sx={{
+        bgcolor: "rgba(11,61,145,0.08)",
+        color: "#0B3D91",
+      }}
+    />
+
+    {userRole === "authority" && (
+      <FormControl size="small" sx={{ minWidth: 130 }}>
+        <Select
+          value={complaint.status}
+          onChange={(e) =>
+            handleStatusChange(complaint.id, e.target.value)
+          }
         >
-          <Typography variant="h6" sx={{ color: "#0B3D91" }}>
-            {complaint.title}
-          </Typography>
-
-          <Chip
-            icon={getStatusIcon(complaint.status)}
-            label={complaint.status}
-            size="small"
-            sx={{
-              bgcolor: "rgba(11,61,145,0.08)",
-              color: "#0B3D91",
-            }}
-          />
-        </Box>
-
-        {/* Middle Row: Description */}
-        <Typography
-          variant="body2"
-          sx={{
-            color: "#0B3D91",
-            mb: 1,
-          }}
-        >
-          {complaint.description}
-        </Typography>
-
-        {/* Meta Info Row */}
-        <Box
-          sx={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: 1.5,
-            mb: 1,
-          }}
-        >
-          <Chip label={complaint.category} size="small" />
-          <Chip label={`Priority: ${complaint.priority}`} size="small" />
-          <Chip
-            label={`Building: ${complaint.building || "N/A"}, Floor: ${
-              complaint.floor || "N/A"
-            }${complaint.block ? `, Block: ${complaint.block}` : ""}${
-              complaint.room ? `, Room: ${complaint.room}` : ""
-            }`}
-            size="small"
-          />
-        </Box>
-
-        {/* Bottom Row: Student + Actions */}
-        <Box
-          sx={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            mt: 1,
-          }}
-        >
-          <Typography variant="caption" sx={{ color: "#0B3D91" }}>
-            {complaint.studentName} — {complaint.date}
-          </Typography>
-
-          <Box sx={{ display: "flex", gap: 1 }}>
-            {userRole === "authority" && (
-              <FormControl size="small" sx={{ minWidth: 140 }}>
-                <InputLabel>Status</InputLabel>
-                <Select
-                  value={complaint.status}
-                  label="Status"
-                  onChange={(e) =>
-                    handleStatusChange(complaint.id, e.target.value)
-                  }
-                >
-                  <MenuItem value="pending">Pending</MenuItem>
-                  <MenuItem value="in-progress">In Progress</MenuItem>
-                  <MenuItem value="resolved">Resolved</MenuItem>
-                  <MenuItem value="rejected">Rejected</MenuItem>
-                </Select>
-              </FormControl>
-            )}
-
-            <Button
-              variant="outlined"
-              size="small"
-              onClick={() => {
-                setViewComplaint(complaint);
-                setViewDialog(true);
-              }}
-              sx={{
-                borderColor: "#0B3D91",
-                color: "white",
-                textTransform: "none",
-              }}
-            >
-              View Details
-            </Button>
-          </Box>
-        </Box>
-      </Box>
-    ))}
+          <MenuItem value="pending">Pending</MenuItem>
+          <MenuItem value="in-progress">In Progress</MenuItem>
+          <MenuItem value="resolved">Resolved</MenuItem>
+          <MenuItem value="rejected">Rejected</MenuItem>
+        </Select>
+      </FormControl>
+    )}
   </Box>
-)}
+
+  {/* VIEW DETAILS – RIGHT MOST */}
+  <Button
+    variant="outlined"
+    size="small"
+    onClick={() => {
+      setViewComplaint(complaint);
+      setViewDialog(true);
+    }}
+    sx={{
+      borderColor: "#0B3D91",
+      color: "#ffffffff",
+      textTransform: "none",
+      whiteSpace: "nowrap",
+    }}
+  >
+    View Details
+  </Button>
+</Box>
+
+      </Box>
+    </Box>
+  ))}
+</Box>
 
 
-      {/* Complaint Details Dialog */}
-<Dialog open={viewDialog} onClose={() => setViewDialog(false)} maxWidth="sm" fullWidth>
-  <DialogTitle>Complaint Details</DialogTitle>
-  <DialogContent>
+
+{/* Complaint Details Dialog */}
+<Dialog open={viewDialog} onClose={() => setViewDialog(false)} maxWidth="md" fullWidth>
+  <DialogTitle sx={{ bgcolor: 'white', color: 'primary.main' }}>Complaint Details</DialogTitle>
+  <DialogContent sx={{ bgcolor: 'white' }}>
     {viewComplaint && (
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
+      <Box sx={{ display: 'flex', gap: 4, pt: 2, flexWrap: 'wrap', bgcolor: 'white' }}>
         
-        {/* Title */}
-        <Typography variant="h6" sx={{ color: '#0B3D91' }}>
-          {viewComplaint.title}
-        </Typography>
+        {/* Left: Complaint Info */}
+        <Box sx={{ flex: 1, minWidth: 300 }}>
+          {/* Title */}
+          <Typography variant="h5" sx={{ color: 'primary.main', fontWeight: 'bold', mb: 1 }}>
+            {viewComplaint.title}
+          </Typography>
 
-        {/* Description */}
-        <Typography variant="body2" sx={{ color: '#0B3D91' }}>
-          {viewComplaint.description}
-        </Typography>
+          {/* Description */}
+          <Typography variant="body1" sx={{ color: 'primary.main', mb: 2 }}>
+            {viewComplaint.description}
+          </Typography>
 
-        {/* Student & Date */}
-        <Typography variant="subtitle2" sx={{ color: '#0B3D91' }}>
-          Submitted by: {viewComplaint.studentName} on {viewComplaint.date}
-        </Typography>
+          {/* Student & Date */}
+          <Typography variant="subtitle1" sx={{ color: 'primary.main', mb: 1 }}>
+            Submitted by: {viewComplaint.studentName} <br />
+            Date: {viewComplaint.date}
+          </Typography>
 
-        {/* Location */}
-        <Typography sx={{ color: '#0B3D91' }}>
-          Location: 
-          {viewComplaint.building ? ` Building ${viewComplaint.building}` : " Not Provided"}
-          {viewComplaint.floor ? `, Floor ${viewComplaint.floor}` : ""}
-          {viewComplaint.block ? `, Block ${viewComplaint.block}` : ""}
-          {viewComplaint.room ? `, Room ${viewComplaint.room}` : ""}
-        </Typography>
+          {/* Location */}
+          <Typography variant="subtitle1" sx={{ color: 'primary.main' }}>
+            Location: 
+            {viewComplaint.building ? ` Building ${viewComplaint.building}` : " Not Provided"}
+            {viewComplaint.floor ? `, Floor ${viewComplaint.floor}` : ""}
+            {viewComplaint.block ? `, Block ${viewComplaint.block}` : ""}
+            {viewComplaint.room ? `, Room ${viewComplaint.room}` : ""}
+          </Typography>
+        </Box>
 
-        {/* Authority Response */}
+        {/* Right: Authority Response */}
         {viewComplaint.reply && (
           <Box
             sx={{
-              bgcolor: alpha(theme.palette.primary.main, 0.03),
-              p: 2,
-              borderRadius: 1,
+              flex: 1,
+              minWidth: 300,
+              bgcolor: 'white',
+              p: 3,
+              borderRadius: 2,
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'flex-start',
+              border: theme => `1px solid ${theme.palette.primary.main}`, // optional border to distinguish
             }}
           >
-            <Typography variant="subtitle2" sx={{ color: '#0B3D91' }}>
-              Authority's Response:
+            <Typography variant="h6" sx={{ color: 'primary.main', mb: 1, fontWeight: 'bold' }}>
+              Authority's Response
             </Typography>
-            <Typography sx={{ color: '#0B3D91' }}>
+            <Typography variant="body1" sx={{ color: 'primary.main', fontSize: '1rem' }}>
               {viewComplaint.reply}
             </Typography>
           </Box>
@@ -891,10 +922,14 @@ const handleSubmitReply = async () => {
     )}
   </DialogContent>
 
-  <DialogActions>
-    <Button onClick={() => setViewDialog(false)}>Close</Button>
+  <DialogActions sx={{ bgcolor: 'white' }}>
+    <Button onClick={() => setViewDialog(false)} sx={{ color: 'white' }}>
+      Close
+    </Button>
   </DialogActions>
 </Dialog>
+
+
 
 
 
